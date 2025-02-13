@@ -1,5 +1,22 @@
 import "./App.css";
 import { ScadEditor } from "./components/scadEditor";
+import "@google/model-viewer";
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "model-viewer": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      > & {
+        src: string;
+        alt: string;
+        "camera-controls"?: boolean;
+        "touch-action"?: string;
+      };
+    }
+  }
+}
 
 function App() {
   return (
@@ -8,7 +25,13 @@ function App() {
         <ScadEditor />
       </div>
       <div>
-        <ScadEditor />
+        <model-viewer
+          style={{ width: "100%", height: "100%" }}
+          src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+          alt="A 3D model of an astronaut"
+          camera-controls
+          touch-action="pan-y"
+        ></model-viewer>
       </div>
     </main>
   );
