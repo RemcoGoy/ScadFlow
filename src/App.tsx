@@ -2,6 +2,7 @@ import "./App.css";
 import { ScadEditor } from "./components/scadEditor";
 import "@google/model-viewer";
 import { invoke } from "@tauri-apps/api/core";
+import { useScadStore } from "./store/scadStore";
 
 declare global {
   namespace JSX {
@@ -20,6 +21,12 @@ declare global {
 }
 
 function App() {
+  const { scad } = useScadStore();
+
+  const refresh = () => {
+    invoke("refresh_model", { scad });
+  };
+
   return (
     <main className="bg-black w-full h-screen grid grid-cols-2 relative">
       <div>
@@ -37,7 +44,7 @@ function App() {
       <button
         className="absolute bottom-8 right-8 bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-full shadow-lg"
         onClick={() => {
-          invoke("greet", { name: "world" });
+          refresh();
         }}
       >
         <svg
@@ -51,7 +58,7 @@ function App() {
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth={2}
-            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
       </button>
