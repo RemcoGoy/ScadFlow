@@ -1,6 +1,7 @@
 import "./App.css";
 import { ScadEditor } from "./components/scadEditor";
 import "@google/model-viewer";
+import { invoke } from "@tauri-apps/api/core";
 
 declare global {
   namespace JSX {
@@ -20,7 +21,7 @@ declare global {
 
 function App() {
   return (
-    <main className="bg-black w-full h-screen grid grid-cols-2">
+    <main className="bg-black w-full h-screen grid grid-cols-2 relative">
       <div>
         <ScadEditor />
       </div>
@@ -33,6 +34,27 @@ function App() {
           touch-action="pan-y"
         ></model-viewer>
       </div>
+      <button
+        className="absolute bottom-8 right-8 bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-full shadow-lg"
+        onClick={() => {
+          invoke("greet", { name: "world" });
+        }}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-6 w-6"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+          />
+        </svg>
+      </button>
     </main>
   );
 }
