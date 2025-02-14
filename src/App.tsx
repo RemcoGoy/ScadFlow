@@ -3,6 +3,7 @@ import { ScadEditor } from "./components/scadEditor";
 import "@google/model-viewer";
 import { invoke } from "@tauri-apps/api/core";
 import { useScadStore } from "./store/scadStore";
+import { useState } from "react";
 
 declare global {
   namespace JSX {
@@ -22,9 +23,12 @@ declare global {
 
 function App() {
   const { scad } = useScadStore();
+  const [modelPath, setModelPath] = useState<string | null>(null);
 
-  const refresh = () => {
-    invoke("refresh_model", { scad });
+  const refresh = async () => {
+    invoke("render_scad", { scad }).then((response) => {
+      setModelPath(response as string);
+    });
   };
 
   return (
@@ -33,13 +37,15 @@ function App() {
         <ScadEditor />
       </div>
       <div>
-        <model-viewer
-          style={{ width: "100%", height: "100%" }}
-          src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-          alt="A 3D model of an astronaut"
-          camera-controls
-          touch-action="pan-y"
-        ></model-viewer>
+        {modelPath && (
+          <model-viewer
+            style={{ width: "100%", height: "100%" }}
+            src={modelPath}
+            alt="A 3D model of an astronaut"
+            camera-controls
+            touch-action="pan-y"
+          ></model-viewer>
+        )}
       </div>
       <button
         className="absolute bottom-8 right-8 bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-full shadow-lg"
