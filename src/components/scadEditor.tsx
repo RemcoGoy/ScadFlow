@@ -1,5 +1,4 @@
-import CodeMirror from "@uiw/react-codemirror";
-import { javascript } from "@codemirror/lang-javascript";
+import { Editor } from "@monaco-editor/react";
 import { useScadStore } from "../store/scadStore";
 
 interface ScadEditorProps {
@@ -15,18 +14,26 @@ export function ScadEditor({ initialValue = "", onChange }: ScadEditorProps) {
     setScad(initialValue);
   }
 
-  const handleChange = (value: string) => {
-    setScad(value);
-    onChange?.(value);
+  const handleChange = (value: string | undefined) => {
+    if (value !== undefined) {
+      setScad(value);
+      onChange?.(value);
+    }
   };
 
   return (
-    <div className="scad-editor">
-      <CodeMirror
+    <div className="scad-editor h-full">
+      <Editor
         value={scad}
-        theme="dark"
-        extensions={[javascript()]}
+        theme="vs-dark"
+        language="javascript"
         onChange={handleChange}
+        options={{
+          minimap: { enabled: false },
+          fontSize: 14,
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+        }}
       />
     </div>
   );
