@@ -1,95 +1,16 @@
 import "./App.css";
-import { ScadEditor } from "./components/ScadEditor.tsx";
-import { useEffect, useState } from "react";
-import OpenSCAD from "./wasm/openscad.js";
-import { parseOff } from "./lib/io/off.ts";
-import { exportGlb } from "./lib/io/glb.ts";
-import { readFileAsDataURL } from "./lib/utils.ts";
-import { Viewer } from "./components/Viewer.tsx";
-import { useScadStore } from "./store/scadStore.ts";
+import { ScadEditor } from "@/components/ScadEditor.tsx";
+import { Viewer } from "@/components/Viewer.tsx";
+import { useScadStore } from "@/store/scadStore.ts";
+import { generateModel } from "./lib/service/scad";
 
 function App() {
-  const [scadInstance, setScadInstance] = useState<any>(null);
   const { scadCode, setModelUrl } = useScadStore();
-
-  const newInstance = async () => {
-    const instance = await OpenSCAD({ noInitialRun: true });
-    instance.FS.chdir("/");
-    instance.FS.mkdir("/locale");
-    return instance;
-  };
-
-  const generateModel = async (code: string) => {
-    if (!scadInstance) return null;
-
-    try {
-      // Write the code to the filesystem
-      scadInstance.FS.writeFile("/input.scad", code);
-
-      await scadInstance.callMain([
-        "/input.scad",
-        "--backend=manifold",
-        "--export-format=off",
-        "-o",
-        "/model.off",
-      ]);
-      console.log("OpenSCAD processing completed");
-      return true;
-    } catch (error) {
-      console.error("Error generating model:", error);
-      return false;
-    }
-  };
-
-  const convertOffToGlb = async () => {
-    if (!scadInstance) return;
-
-    try {
-      // Check if the file exists before trying to read it
-      if (!scadInstance.FS.analyzePath("/model.off").exists) {
-        console.error("Output file '/model.off' does not exist");
-        return;
-      }
-
-      // Read the output file
-      const output = scadInstance.FS.readFile("/model.off");
-
-      // Convert binary data to text
-      const decoder = new TextDecoder("utf-8");
-      const offFileContent = decoder.decode(output);
-
-      const parsedOutput = parseOff(offFileContent);
-      const glbData = await exportGlb(parsedOutput);
-      const displayFile = new File([glbData], "model.glb");
-      const fileUrl = displayFile && (await readFileAsDataURL(displayFile));
-
-      setModelUrl(fileUrl);
-    } catch (error) {
-      console.error("Failed to convert OFF to GLB:", error);
-    }
-  };
-
-  useEffect(() => {
-    const init = async () => {
-      const instance = await newInstance();
-      setScadInstance(instance);
-    };
-
-    init();
-  }, []);
 
   const refresh = async () => {
     try {
-      // Create a new instance for each operation
-      const instance = await newInstance();
-      setScadInstance(instance);
-
-      // Get current code and regenerate model
-      const modelGenerated = await generateModel(scadCode);
-
-      if (modelGenerated) {
-        await convertOffToGlb();
-      }
+      const displayUrl = await generateModel(scadCode);
+      setModelUrl(displayUrl);
     } catch (error) {
       console.error("Error during refresh:", error);
     }
