@@ -11,6 +11,12 @@ importers:
       '@codemirror/lang-javascript':
         specifier: ^6.2.3
         version: 6.2.3
+      '@gltf-transform/core':
+        specifier: ^4.1.1
+        version: 4.1.1
+      '@gltf-transform/extensions':
+        specifier: ^4.1.1
+        version: 4.1.1
       '@google/model-viewer':
         specifier: ^4.0.0
         version: 4.0.0(three@0.173.0)
@@ -332,6 +338,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@gltf-transform/core@4.1.1':
+    resolution: {integrity: sha512-KE93S9NcgjfFWlFxF+d5wHrurYZTccuYmATxjmLrv7JueyPQ6o4ReZQdBzfKL69vk3aUPsL7geB6j44DybVaGw==}
+
+  '@gltf-transform/extensions@4.1.1':
+    resolution: {integrity: sha512-WQG21HmSd8dhNZfGLPtrZGoBb3VLR2buYl/P76hw9nk9G+CswYWRNC28N9q1y2QVcx2ZODf57Np5bvASNmXKFw==}
 
   '@google/model-viewer@4.0.0':
     resolution: {integrity: sha512-hf4mixP178gGtvWQq97a0uULr7k98BwJGRU3lvt12XnurOdLmZA/RPdW4tPsINNNQxZvmvQsjud4lZWre6WGNw==}
@@ -881,6 +893,9 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
+  ktx-parse@0.7.1:
+    resolution: {integrity: sha512-FeA3g56ksdFNwjXJJsc1CCc7co+AJYDp6ipIp878zZ2bU8kWROatLYf39TQEd4/XRSUvBXovQ8gaVKWPXsCLEQ==}
+
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
 
@@ -1002,6 +1017,9 @@ packages:
 
   promise-worker-transferable@1.0.4:
     resolution: {integrity: sha512-bN+0ehEnrXfxV2ZQvU2PetO0n4gqBD4ulq3MI1WOPLgr7/Mg9yRQkX5+0v1vagr74ZTsl7XtzlaYDo2EuCeYJw==}
+
+  property-graph@3.0.0:
+    resolution: {integrity: sha512-TnzxUsttmGtw+OiU0LDw+0FlMbJ8vV8pOjyDI7+Kdni4Tj0hW5BFh7TatQu7Y68hcvvFmiFOHilKShsA4R82fA==}
 
   react-dom@18.3.1:
     resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}
@@ -1371,6 +1389,15 @@ snapshots:
 
   '@esbuild/win32-x64@0.24.2':
     optional: true
+
+  '@gltf-transform/core@4.1.1':
+    dependencies:
+      property-graph: 3.0.0
+
+  '@gltf-transform/extensions@4.1.1':
+    dependencies:
+      '@gltf-transform/core': 4.1.1
+      ktx-parse: 0.7.1
 
   '@google/model-viewer@4.0.0(three@0.173.0)':
     dependencies:
@@ -1833,6 +1860,8 @@ snapshots:
 
   json5@2.2.3: {}
 
+  ktx-parse@0.7.1: {}
+
   lie@3.3.0:
     dependencies:
       immediate: 3.0.6
@@ -1937,6 +1966,8 @@ snapshots:
     dependencies:
       is-promise: 2.2.2
       lie: 3.3.0
+
+  property-graph@3.0.0: {}
 
   react-dom@18.3.1(react@18.3.1):
     dependencies:

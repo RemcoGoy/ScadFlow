@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.3",
+    "@gltf-transform/core": "^4.1.1",
+    "@gltf-transform/extensions": "^4.1.1",
     "@google/model-viewer": "^4.0.0",
     "@monaco-editor/react": "^4.7.0",
     "@tailwindcss/cli": "^4.0.6",

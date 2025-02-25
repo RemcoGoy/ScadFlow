@@ -3,8 +3,9 @@ import { ScadEditor } from "./components/scadEditor";
 import "@google/model-viewer";
 import { useEffect, useState } from "react";
 import OpenSCAD from "./wasm/openscad.js";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeFile } from "@tauri-apps/plugin-fs";
+import { parseOff } from "./lib/io/off.ts";
+import { exportGlb } from "./lib/io/glb.ts";
+import { readFileAsDataURL } from "./lib/utils.ts";
 
 declare global {
   namespace JSX {
@@ -25,6 +26,7 @@ declare global {
 function App() {
   const [scadInstance, setScadInstance] = useState<any>(null);
   const [scadCode, setScadCode] = useState<string>(`cube(10);`);
+  const [displayFileUrl, setDisplayFileUrl] = useState<string | null>(null);
 
   const generateModel = async (code: string) => {
     if (!scadInstance) return null;
@@ -75,24 +77,17 @@ function App() {
 
     // Read the output file
     const output = scadInstance.FS.readFile("/cube.off");
+    // Convert binary data to text
+    const decoder = new TextDecoder("utf-8");
+    const offFileContent = decoder.decode(output);
 
     try {
-      // Open save dialog and get file path
-      const filePath = await save({
-        filters: [
-          {
-            name: "OFF Model",
-            extensions: ["off"],
-          },
-        ],
-        defaultPath: "model.off",
-      });
+      const parsedOutput = parseOff(offFileContent);
+      const glbData = await exportGlb(parsedOutput);
+      const displayFile = new File([glbData], "model.glb");
+      const fileUrl = displayFile && (await readFileAsDataURL(displayFile));
 
-      if (filePath) {
-        // Write the binary file to the selected path
-        await writeFile(filePath, output);
-        console.log("File saved successfully");
-      }
+      setDisplayFileUrl(fileUrl);
     } catch (error) {
       console.error("Failed to save file:", error);
     }
@@ -103,7 +98,15 @@ function App() {
       <div>
         <ScadEditor onChange={handleCodeChange} />
       </div>
-      <div></div>
+      <div>
+        {displayFileUrl && (
+          <model-viewer
+            src={displayFileUrl}
+            alt="A 3D model"
+            camera-controls
+          ></model-viewer>
+        )}
+      </div>
       <button
         className="absolute bottom-8 right-8 bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-full shadow-lg"
         onClick={refresh}
