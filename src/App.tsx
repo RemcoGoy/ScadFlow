@@ -96,12 +96,12 @@ function App() {
 
   const refresh = async () => {
     try {
+      // Create a new instance for each operation
+      const instance = await newInstance();
+      setScadInstance(instance);
+
       // Get current code and regenerate model
       const modelGenerated = await generateModel(scadCode);
-
-      // List files to debug
-      console.log("Filesystem contents after model generation:");
-      listFilesystem(scadInstance);
 
       if (modelGenerated) {
         await convertOffToGlb();
