@@ -1,57 +1,32 @@
 import "./App.css";
-import { ScadEditor } from "./components/scadEditor";
-import "@google/model-viewer";
-import { invoke } from "@tauri-apps/api/core";
-import { useScadStore } from "./store/scadStore";
-import { useState } from "react";
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "model-viewer": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement>,
-        HTMLElement
-      > & {
-        src: string;
-        alt: string;
-        "camera-controls"?: boolean;
-        "touch-action"?: string;
-      };
-    }
-  }
-}
+import { ScadEditor } from "@/components/ScadEditor.tsx";
+import { Viewer } from "@/components/Viewer.tsx";
+import { useScadStore } from "@/store/scadStore.ts";
+import { generateModel } from "./lib/service/scad";
 
 function App() {
-  const { scad } = useScadStore();
-  const [modelPath, setModelPath] = useState<string | null>(null);
+  const { scadCode, setModelUrl } = useScadStore();
 
   const refresh = async () => {
-    invoke("render_scad", { scad }).then((response) => {
-      setModelPath(response as string);
-    });
+    try {
+      const displayUrl = await generateModel(scadCode);
+      setModelUrl(displayUrl);
+    } catch (error) {
+      console.error("Error during refresh:", error);
+    }
   };
 
   return (
     <main className="bg-black w-full h-screen grid grid-cols-2 relative">
-      <div>
+      <div className="col-span-1">
         <ScadEditor />
       </div>
-      <div>
-        {modelPath && (
-          <model-viewer
-            style={{ width: "100%", height: "100%" }}
-            src={modelPath}
-            alt="A 3D model of an astronaut"
-            camera-controls
-            touch-action="pan-y"
-          ></model-viewer>
-        )}
+      <div className="col-span-1">
+        <Viewer />
       </div>
       <button
         className="absolute bottom-8 right-8 bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-full shadow-lg"
-        onClick={() => {
-          refresh();
-        }}
+        onClick={refresh}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
