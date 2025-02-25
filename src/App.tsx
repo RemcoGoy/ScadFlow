@@ -1,32 +1,16 @@
 import "./App.css";
-import { ScadEditor } from "./components/scadEditor";
-import "@google/model-viewer";
+import { ScadEditor } from "./components/ScadEditor.tsx";
 import { useEffect, useState } from "react";
 import OpenSCAD from "./wasm/openscad.js";
 import { parseOff } from "./lib/io/off.ts";
 import { exportGlb } from "./lib/io/glb.ts";
-import { listFilesystem, readFileAsDataURL } from "./lib/utils.ts";
-
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      "model-viewer": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement>,
-        HTMLElement
-      > & {
-        src: string;
-        alt: string;
-        "camera-controls"?: boolean;
-        "touch-action"?: string;
-      };
-    }
-  }
-}
+import { readFileAsDataURL } from "./lib/utils.ts";
+import { Viewer } from "./components/Viewer.tsx";
+import { useScadStore } from "./store/scadStore.ts";
 
 function App() {
   const [scadInstance, setScadInstance] = useState<any>(null);
-  const [scadCode, setScadCode] = useState<string>("");
-  const [displayFileUrl, setDisplayFileUrl] = useState<string | null>(null);
+  const { scadCode, setModelUrl } = useScadStore();
 
   const newInstance = async () => {
     const instance = await OpenSCAD({ noInitialRun: true });
@@ -79,7 +63,7 @@ function App() {
       const displayFile = new File([glbData], "model.glb");
       const fileUrl = displayFile && (await readFileAsDataURL(displayFile));
 
-      setDisplayFileUrl(fileUrl);
+      setModelUrl(fileUrl);
     } catch (error) {
       console.error("Failed to convert OFF to GLB:", error);
     }
@@ -111,24 +95,13 @@ function App() {
     }
   };
 
-  const handleCodeChange = (newCode: string) => {
-    setScadCode(newCode);
-  };
-
   return (
     <main className="bg-black w-full h-screen grid grid-cols-2 relative">
-      <div>
-        <ScadEditor onChange={handleCodeChange} />
+      <div className="col-span-1">
+        <ScadEditor />
       </div>
-      <div>
-        {displayFileUrl && (
-          <model-viewer
-            style={{ width: "100%", height: "100%" }}
-            src={displayFileUrl}
-            alt="A 3D model"
-            camera-controls
-          ></model-viewer>
-        )}
+      <div className="col-span-1">
+        <Viewer />
       </div>
       <button
         className="absolute bottom-8 right-8 bg-blue-500 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-full shadow-lg"
