@@ -1,18 +1,18 @@
 import { Editor } from "@monaco-editor/react";
 import { useScadStore } from "../store/scadStore";
+import { useEffect } from "react";
 
 interface ScadEditorProps {
   initialValue?: string;
   onChange?: (value: string) => void;
 }
 
-export function ScadEditor({ initialValue = "", onChange }: ScadEditorProps) {
+export function ScadEditor({ onChange }: ScadEditorProps) {
   const { scad, setScad } = useScadStore();
 
-  // Set initial value if provided and scad is empty
-  if (initialValue && !scad) {
-    setScad(initialValue);
-  }
+  useEffect(() => {
+    handleChange(scad);
+  }, []);
 
   const handleChange = (value: string | undefined) => {
     if (value !== undefined) {
