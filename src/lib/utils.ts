@@ -1,3 +1,25 @@
+export function mapObject(
+  o: any,
+  f: (key: string, value: any) => any,
+  ifPred: (key: string) => boolean
+) {
+  const ret = [];
+  for (const key of Object.keys(o)) {
+    if (ifPred && !ifPred(key)) {
+      continue;
+    }
+    ret.push(f(key, o[key]));
+  }
+  return ret;
+}
+
+// In PWA mode, persist files in LocalStorage instead of the hash fragment.
+export function isInStandaloneMode() {
+  return Boolean(
+    "standalone" in window.navigator && window.navigator.standalone
+  );
+}
+
 export function readFileAsDataURL(file: File) {
   return new Promise<string>((res, rej) => {
     const reader = new FileReader();
