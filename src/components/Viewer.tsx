@@ -7,8 +7,6 @@ declare global {
       > & {
         src: string;
         alt: string;
-        "camera-controls"?: boolean;
-        "touch-action"?: string;
       };
     }
   }
@@ -26,6 +24,9 @@ export function Viewer() {
       src={modelUrl}
       alt="A 3D model of an object"
       camera-controls
+      camera-target="0m 0m 0m"
+      disable-tap
+      camera-orbit="45deg 55deg 100m"
     ></model-viewer>
   );
 }
