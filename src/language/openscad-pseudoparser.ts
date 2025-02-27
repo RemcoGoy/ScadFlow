@@ -20,14 +20,9 @@ export type ParsedFile = {
   uses: string[];
 };
 
-export const stripComments = (src: string) =>
-  src.replaceAll(/\/\*(.|[\s\S])*?\*\/|\/\/.*?$/gm, "");
+export const stripComments = (src: string) => src.replaceAll(/\/\*(.|[\s\S])*?\*\/|\/\/.*?$/gm, "");
 
-export function parseOpenSCAD(
-  path: string,
-  src: string,
-  skipPrivates: boolean
-): ParsedFile {
+export function parseOpenSCAD(path: string, src: string, skipPrivates: boolean): ParsedFile {
   const withoutComments = stripComments(src);
   const vars = [];
   const functions: ParsedFunctionoidDefs = {};
@@ -41,7 +36,7 @@ export function parseOpenSCAD(
     vars.push(m[1]);
   }
   for (const m of withoutComments.matchAll(
-    /(function|module)\s+([$\w]+)\s*\(([^)]*)\)(?:\s*(?:=\s*)?(\{\}|[^{}]+?;))?/gm
+    /(function|module)\s+([$\w]+)\s*\(([^)]*)\)(?:\s*(?:=\s*)?(\{\}|[^{}]+?;))?/gm,
   )) {
     const type = m[1];
     const name = m[2];
@@ -51,11 +46,7 @@ export function parseOpenSCAD(
     const paramsStr = m[3];
     const optBody = m[4];
     const params = [];
-    if (
-      /^(\s*([$\w]+(\s*=[^,()[]+)?(\s*,\s*[$\w]+(\s*=[^,()[]+)?)*)?\s*)$/m.test(
-        paramsStr
-      )
-    ) {
+    if (/^(\s*([$\w]+(\s*=[^,()[]+)?(\s*,\s*[$\w]+(\s*=[^,()[]+)?)*)?\s*)$/m.test(paramsStr)) {
       for (const paramStr of paramsStr.split(",")) {
         const am = /^\s*([$\w]+)(?:\s*=([^,()[]+))?\s*$/.exec(paramStr);
         if (am) {
@@ -71,12 +62,9 @@ export function parseOpenSCAD(
     (type == "function" ? functions : modules)[name] = {
       path,
       name,
-      signature: `${name}(${paramsStr
-        .replaceAll(/[\s]+/gm, " ")
-        .replaceAll(/\b | \b/g, "")})`,
+      signature: `${name}(${paramsStr.replaceAll(/[\s]+/gm, " ").replaceAll(/\b | \b/g, "")})`,
       params,
-      referencesChildren:
-        optBody != null ? optBody.indexOf("children()") >= 0 : null,
+      referencesChildren: optBody != null ? optBody.indexOf("children()") >= 0 : null,
     };
   }
   return { vars, functions, modules, includes, uses };

@@ -1,9 +1,6 @@
 import { Document, NodeIO, Accessor, Primitive } from "@gltf-transform/core";
-import {
-  Light as LightDef,
-  KHRLightsPunctual,
-} from "@gltf-transform/extensions";
-import { Color, Face, IndexedPolyhedron, DEFAULT_FACE_COLOR } from "./common";
+import { Light as LightDef, KHRLightsPunctual } from "@gltf-transform/extensions";
+import { Color, Face, IndexedPolyhedron } from "./common";
 
 type Geom = {
   positions: Float32Array;
@@ -14,7 +11,7 @@ type Geom = {
 function createPrimitive(
   doc: Document,
   baseColorFactor: Color,
-  { positions, indices, colors }: Geom
+  { positions, indices, colors }: Geom,
 ): Primitive {
   const prim = doc
     .createPrimitive()
@@ -26,26 +23,18 @@ function createPrimitive(
         .setAlphaMode(baseColorFactor[3] < 1 ? "BLEND" : "OPAQUE")
         .setMetallicFactor(0.0)
         .setRoughnessFactor(0.8)
-        .setBaseColorFactor(baseColorFactor)
+        .setBaseColorFactor(baseColorFactor),
     )
-    .setAttribute(
-      "POSITION",
-      doc.createAccessor().setType(Accessor.Type.VEC3).setArray(positions)
-    )
-    .setIndices(
-      doc.createAccessor().setType(Accessor.Type.SCALAR).setArray(indices)
-    );
+    .setAttribute("POSITION", doc.createAccessor().setType(Accessor.Type.VEC3).setArray(positions))
+    .setIndices(doc.createAccessor().setType(Accessor.Type.SCALAR).setArray(indices));
   if (colors) {
-    prim.setAttribute(
-      "COLOR_0",
-      doc.createAccessor().setType(Accessor.Type.VEC3).setArray(colors)
-    );
+    prim.setAttribute("COLOR_0", doc.createAccessor().setType(Accessor.Type.VEC3).setArray(colors));
   }
   return prim;
 }
 
 function getGeom(data: IndexedPolyhedron): Geom {
-  let positions = new Float32Array(data.vertices.length * 3);
+  const positions = new Float32Array(data.vertices.length * 3);
   const indices = new Uint32Array(data.faces.length * 3);
 
   const addedVertices = new Map<number, number>();
@@ -66,8 +55,7 @@ function getGeom(data: IndexedPolyhedron): Geom {
 
   data.faces.forEach((face, i) => {
     const { vertices } = face;
-    if (vertices.length < 3)
-      throw new Error("Face must have at least 3 vertices");
+    if (vertices.length < 3) throw new Error("Face must have at least 3 vertices");
 
     const offset = i * 3;
     indices[offset] = addVertex(vertices[0]);
@@ -80,10 +68,7 @@ function getGeom(data: IndexedPolyhedron): Geom {
   };
 }
 
-export async function exportGlb(
-  data: IndexedPolyhedron,
-  defaultColor: Color = DEFAULT_FACE_COLOR
-): Promise<Blob> {
+export async function exportGlb(data: IndexedPolyhedron): Promise<Blob> {
   const doc = new Document();
   const lightExt = doc.createExtension(KHRLightsPunctual);
   doc.createBuffer();
@@ -99,9 +84,9 @@ export async function exportGlb(
             .createLight()
             .setType(LightDef.Type.DIRECTIONAL)
             .setIntensity(1.0)
-            .setColor([1.0, 1.0, 1.0])
+            .setColor([1.0, 1.0, 1.0]),
         )
-        .setRotation([-0.3250576, -0.3250576, 0, 0.8880739])
+        .setRotation([-0.3250576, -0.3250576, 0, 0.8880739]),
     )
     .addChild(
       doc
@@ -112,9 +97,9 @@ export async function exportGlb(
             .createLight()
             .setType(LightDef.Type.DIRECTIONAL)
             .setIntensity(1.0)
-            .setColor([1.0, 1.0, 1.0])
+            .setColor([1.0, 1.0, 1.0]),
         )
-        .setRotation([0.6279631, 0.6279631, 0, 0.4597009])
+        .setRotation([0.6279631, 0.6279631, 0, 0.4597009]),
     );
   const mesh = doc.createMesh();
 
@@ -124,20 +109,14 @@ export async function exportGlb(
     if (!faces) facesByColor.set(face.colorIndex, (faces = []));
     faces.push(face);
   });
-  for (let [colorIndex, faces] of facesByColor.entries()) {
-    let color = data.colors[colorIndex];
+  for (const [colorIndex, faces] of facesByColor.entries()) {
+    const color = data.colors[colorIndex];
     mesh.addPrimitive(
-      createPrimitive(
-        doc,
-        color,
-        getGeom({ vertices: data.vertices, faces, colors: data.colors })
-      )
+      createPrimitive(doc, color, getGeom({ vertices: data.vertices, faces, colors: data.colors })),
     );
   }
   scene.addChild(doc.createNode().setMesh(mesh));
 
-  const glb = await new NodeIO()
-    .registerExtensions([KHRLightsPunctual])
-    .writeBinary(doc);
+  const glb = await new NodeIO().registerExtensions([KHRLightsPunctual]).writeBinary(doc);
   return new Blob([glb], { type: "model/gltf-binary" });
 }

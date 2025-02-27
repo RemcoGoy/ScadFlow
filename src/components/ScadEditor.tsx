@@ -18,20 +18,14 @@ if (isMonacoSupported) {
 
 export function ScadEditor() {
   const { scadCode, setScadCode } = useScadStore();
-  const [editor, setEditor] = useState(
-    null as monaco.editor.IStandaloneCodeEditor | null
-  );
+  const [editor, setEditor] = useState(null as monaco.editor.IStandaloneCodeEditor | null);
 
   if (editor) {
     const checkerRun = { markers: [] };
     const editorModel = editor.getModel();
     if (editorModel) {
       if (checkerRun && monacoInstance) {
-        monacoInstance.editor.setModelMarkers(
-          editorModel,
-          "openscad",
-          checkerRun.markers
-        );
+        monacoInstance.editor.setModelMarkers(editorModel, "openscad", checkerRun.markers);
       }
     }
   }
@@ -66,9 +60,7 @@ export function ScadEditor() {
     editor.addAction({
       id: "openscad-save-project",
       label: "Save OpenSCAD project",
-      keybindings: [
-        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS,
-      ],
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS],
       run: () => {},
     });
 

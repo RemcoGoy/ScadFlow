@@ -2,7 +2,7 @@
 
 import { deployedArchiveNames, zipArchives } from "./zip-archives";
 
-declare var BrowserFS: BrowserFSInterface;
+declare let BrowserFS: BrowserFSInterface;
 
 export type FSMounts = {
   [n: string]: { fs: string; options: { zipData: Buffer } };
@@ -11,7 +11,7 @@ export type FSMounts = {
 export type Symlinks = { [alias: string]: string };
 
 export const getParentDir = (path: string) => {
-  let d = path.split("/").slice(0, -1).join("/");
+  const d = path.split("/").slice(0, -1).join("/");
   return d === "" ? (path.startsWith("/") ? "/" : ".") : d;
 };
 
@@ -25,10 +25,7 @@ export async function getBrowserFSLibrariesMounts(archiveNames: string[]) {
   const Buffer = BrowserFS.BFSRequire("buffer").Buffer;
   const fetchData = async (url: string) => (await fetch(url)).arrayBuffer();
   const results: [string, ArrayBuffer][] = await Promise.all(
-    archiveNames.map(async (n: string) => [
-      n,
-      await fetchData(`./libraries/${n}.zip`),
-    ])
+    archiveNames.map(async (n: string) => [n, await fetchData(`./libraries/${n}.zip`)]),
   );
 
   const zipMounts: FSMounts = {};
@@ -47,7 +44,7 @@ export async function symlinkLibraries(
   archiveNames: string[],
   fs: FS,
   prefix = "/libraries",
-  cwd = "/tmp"
+  cwd = "/tmp",
 ) {
   const createSymlink = async (target: string, source: string) => {
     try {
@@ -62,29 +59,26 @@ export async function symlinkLibraries(
       (async () => {
         if (!(n in zipArchives))
           throw new Error(
-            `Archive named ${n} invalid (valid ones: ${deployedArchiveNames.join(
-              ", "
-            )})`
+            `Archive named ${n} invalid (valid ones: ${deployedArchiveNames.join(", ")})`,
           );
         const { symlinks } = zipArchives[n];
         if (symlinks) {
           for (const from in symlinks) {
             const to = symlinks[from];
-            const target =
-              to === "." ? `${prefix}/${n}` : `${prefix}/${n}/${to}`;
+            const target = to === "." ? `${prefix}/${n}` : `${prefix}/${n}/${to}`;
             const source = from.startsWith("/") ? from : `${cwd}/${from}`;
             await createSymlink(target, source);
           }
         } else {
           await createSymlink(`${prefix}/${n}`, `${cwd}/${n}`);
         }
-      })()
-    )
+      })(),
+    ),
   );
 }
 
 function configureAndInstallFS(windowOrSelf: Window, options: any) {
-  return new Promise(async (resolve, reject) => {
+  return new Promise((resolve, reject) => {
     BrowserFS.install(windowOrSelf);
     try {
       BrowserFS.configure(options, function (e: any) {
@@ -131,7 +125,7 @@ export async function createEditorFS({
     },
   });
 
-  var fs = BrowserFS.BFSRequire("fs");
+  const fs = BrowserFS.BFSRequire("fs");
 
   return fs;
 }

@@ -20,6 +20,6 @@ export async function registerOpenSCADLanguage() {
 
   monaco.languages.registerCompletionItemProvider(
     "openscad",
-    await buildOpenSCADCompletionItemProvider()
+    await buildOpenSCADCompletionItemProvider(),
   );
 }

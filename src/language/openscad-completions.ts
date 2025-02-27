@@ -25,9 +25,7 @@ function makeFunctionoidSuggestion(name: string, mod: ParsedFunctionoidDef) {
       } else {
         //argSnippets.push(`${param.name}=${'${' + (i + 1) + ':' + param.name + '}'}`);
         argSnippets.push(
-          `${param.name.replaceAll("$", "\\$")}=${
-            "${" + ++i + ":" + param.name + "}"
-          }`
+          `${param.name.replaceAll("$", "\\$")}=${"${" + ++i + ":" + param.name + "}"}`,
         );
         continue;
       }
@@ -45,8 +43,7 @@ function makeFunctionoidSuggestion(name: string, mod: ParsedFunctionoidDef) {
     label: mod.signature, //`${name}(${(mod.params ?? []).join(', ')})`,
     kind: monaco.languages.CompletionItemKind.Function,
     insertText,
-    insertTextRules:
-      monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
   };
 }
 
@@ -55,15 +52,13 @@ const builtinCompletions = [
     label: `${v}`,
     kind: monaco.languages.CompletionItemKind.Value,
     insertText: `${v}`,
-    insertTextRules:
-      monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
   })),
   ...openscadLanguage.language.keywords.map((v: string) => ({
     label: v,
     kind: monaco.languages.CompletionItemKind.Function,
     insertText: v,
-    insertTextRules:
-      monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
   })),
 ];
 
@@ -85,8 +80,7 @@ function cleanupVariables(snippet: string) {
 export async function buildOpenSCADCompletionItemProvider() {
   const parsedFiles: { [path: string]: Promise<ParsedFile> } = {};
   const workingDir = "/";
-  const toAbsolutePath = (path: string) =>
-    path.startsWith("/") ? path : `${workingDir}/${path}`;
+  const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : `${workingDir}/${path}`);
 
   const allSymlinks: Symlinks = {};
   const zipArchives: ZipArchives = {};
@@ -100,21 +94,21 @@ export async function buildOpenSCADCompletionItemProvider() {
       // Mock implementation since we can't import file handling
       return ""; // Return empty string as placeholder
     } catch (e) {
+      console.error(e);
       throw e;
     }
   }
   const builtinsPath = "<builtins>";
+  // eslint-disable-next-line prefer-const
   let builtinsDefs: ParsedFile;
 
   function getParsed(
     path: string,
     src: string,
-    {
-      skipPrivates,
-      addBuiltins,
-    }: { skipPrivates: boolean; addBuiltins: boolean }
+    { skipPrivates, addBuiltins }: { skipPrivates: boolean; addBuiltins: boolean },
   ) {
-    return (parsedFiles[path] ??= new Promise(async (res, rej) => {
+    // eslint-disable-next-line no-async-promise-executor
+    return (parsedFiles[path] ??= new Promise(async (res) => {
       if (src == null) {
         src = await readFile(path);
       }
@@ -137,11 +131,7 @@ export async function buildOpenSCADCompletionItemProvider() {
 
       const handleInclude = async (isUse: boolean, otherPath: string) => {
         let found = false;
-        for (const option of [
-          `/libraries/${otherPath}`,
-          `${dir}/${otherPath}`,
-          otherPath,
-        ]) {
+        for (const option of [`/libraries/${otherPath}`, `${dir}/${otherPath}`, otherPath]) {
           try {
             const otherSrc = await readFile(option);
             const sub = await getParsed(otherPath, otherSrc, {
@@ -156,18 +146,12 @@ export async function buildOpenSCADCompletionItemProvider() {
               `Failed to read file option ${option} for ${otherPath} ${
                 isUse ? "used" : "included"
               } by ${path}`,
-              e
+              e,
             );
           }
         }
         if (!found) {
-          console.error(
-            "Failed to find ",
-            otherPath,
-            "(context imported in ",
-            path,
-            ")"
-          );
+          console.error("Failed to find ", otherPath, "(context imported in ", path, ")");
         }
       };
 
@@ -180,10 +164,8 @@ export async function buildOpenSCADCompletionItemProvider() {
       await Promise.all(
         [
           ...(ownDefs.uses ?? []).map((p) => [p, true] as [string, boolean]),
-          ...(ownDefs.includes ?? []).map(
-            (p) => [p, false] as [string, boolean]
-          ),
-        ].map(([otherPath, isUse]) => handleInclude(isUse, otherPath))
+          ...(ownDefs.includes ?? []).map((p) => [p, false] as [string, boolean]),
+        ].map(([otherPath, isUse]) => handleInclude(isUse, otherPath)),
       );
 
       mergeDefinitions(false, ownDefs);
@@ -200,24 +182,19 @@ export async function buildOpenSCADCompletionItemProvider() {
   return {
     triggerCharacters: ["<", "/"], //, "\n"],
     //provideCompletionItems: (async (model, position, context, token) => {
-    provideCompletionItems: (async (
-      model: monaco.editor.ITextModel,
-      position: monaco.Position,
-      context: monaco.languages.CompletionContext,
-      token: monaco.CancellationToken
-    ) => {
+    provideCompletionItems: (async (model: monaco.editor.ITextModel, position: monaco.Position) => {
       try {
         const { word } = model.getWordUntilPosition(position);
         const offset = model.getOffsetAt(position);
         const text = model.getValue();
         let previous = text.substring(0, offset);
-        let i = previous.lastIndexOf("\n");
+        const i = previous.lastIndexOf("\n");
         previous = previous.substring(i + 1);
 
         const includeMatch = /\b(include|use)\s*<([^<>\n"]*)$/.exec(previous);
         if (includeMatch) {
           const prefix = includeMatch[2];
-          let folder, filePrefix, folderPrefix;
+          let filePrefix, folderPrefix;
           const i = prefix.lastIndexOf("/");
           if (i < 0) {
             folderPrefix = "";
@@ -228,17 +205,15 @@ export async function buildOpenSCADCompletionItemProvider() {
           }
           const folderName = folderPrefix == "" ? "" : "/" + folderPrefix;
           let files: string[] | null = null;
-          for (const folder of [
-            join("/libraries", folderName),
-            join(workingDir, folderName),
-          ]) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          for (const folder of [join("/libraries", folderName), join(workingDir, folderName)]) {
             files = folderPrefix == "" ? [...Object.keys(allSymlinks)] : [];
             try {
               // Mock implementation since we can't import fs
               files = [...files]; // Just use existing files
               break;
             } catch (e) {
-              //console.error(e);
+              console.error(e);
             }
           }
           const suggestions = [];
@@ -252,11 +227,7 @@ export async function buildOpenSCADCompletionItemProvider() {
               if (/^(LICENSE.*|fonts)$/.test(file)) {
                 continue;
               }
-              if (
-                folderPrefix == "" &&
-                file in zipArchives &&
-                zipArchives[file].symlinks
-              ) {
+              if (folderPrefix == "" && file in zipArchives && zipArchives[file].symlinks) {
                 continue;
               }
               const isFolder = !file.endsWith(".scad");
@@ -300,9 +271,7 @@ export async function buildOpenSCADCompletionItemProvider() {
 
         const previousWithoutComments = stripComments(previous);
         // console.log('previousWithoutComments', previousWithoutComments);
-        const statementMatch = /(^|.*?[{});]|>\s*\n)\s*([$\w]*)$/m.exec(
-          previousWithoutComments
-        );
+        const statementMatch = /(^|.*?[{});]|>\s*\n)\s*([$\w]*)$/m.exec(previousWithoutComments);
         if (statementMatch) {
           const start = statementMatch[1];
           const suggestions: CompletionItem[] = [
@@ -310,7 +279,7 @@ export async function buildOpenSCADCompletionItemProvider() {
             ...mapObject(
               parsed.modules ?? {},
               (name, mod) => makeFunctionoidSuggestion(name, mod),
-              (name) => name.indexOf(word) >= 0
+              (name) => name.indexOf(word) >= 0,
             ),
             ...(parsed.vars ?? [])
               .filter((name) => name.indexOf(word) >= 0)
@@ -318,31 +287,27 @@ export async function buildOpenSCADCompletionItemProvider() {
                 label: name,
                 kind: monaco.languages.CompletionItemKind.Variable,
                 insertText: name.replaceAll("$", "\\$"),
-                insertTextRules:
-                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
               })),
             ...keywordSnippets.map((snippet) => ({
               label: cleanupVariables(snippet).replaceAll(/ body/g, ""),
               kind: monaco.languages.CompletionItemKind.Keyword,
               insertText: snippet,
-              insertTextRules:
-                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
             })),
             // ...getStatementSuggestions().filter(s => start == '' || s.insertText.indexOf(start) >= 0)
           ];
-          suggestions.sort(
-            (a, b) => a.insertText.indexOf(start) - b.insertText.indexOf(start)
-          );
+          suggestions.sort((a, b) => a.insertText.indexOf(start) - b.insertText.indexOf(start));
           return { suggestions };
         }
 
-        const allWithoutComments = stripComments(text);
+        // const allWithoutComments = stripComments(text);
 
         const named: [string, CompletionItem][] = [
           ...mapObject(
             parsed.functions ?? {},
             (name, mod) => [name, makeFunctionoidSuggestion(name, mod)],
-            (name) => name.indexOf(word) >= 0
+            (name) => name.indexOf(word) >= 0,
           ),
         ];
         named.sort(([a], [b]) => a.indexOf(word) - b.indexOf(word));
@@ -352,9 +317,7 @@ export async function buildOpenSCADCompletionItemProvider() {
         //   insertText: name
         // }));
 
-        const suggestions = named.map(
-          ([n, s]) => s as any as monaco.languages.CompletionItem
-        );
+        const suggestions = named.map(([, s]) => s as any as monaco.languages.CompletionItem);
         return { suggestions };
       } catch (e) {
         console.error(e); //, (e as any).stackTrace);

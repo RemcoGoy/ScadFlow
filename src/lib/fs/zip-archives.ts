@@ -87,8 +87,7 @@ export const zipArchives: ZipArchives = {
       ],
     },
     docs: {
-      Usage:
-        "https://boltsparts.github.io/en/docs/0.3/document/openscad/usage.html",
+      Usage: "https://boltsparts.github.io/en/docs/0.3/document/openscad/usage.html",
     },
   },
   brailleSCAD: {
@@ -171,8 +170,7 @@ export const zipArchives: ZipArchives = {
   //   },
   // },
   "openscad-tray": {
-    description:
-      "OpenSCAD library to create rounded rectangular trays with optional subdividers.",
+    description: "OpenSCAD library to create rounded rectangular trays with optional subdividers.",
     gitOrigin: {
       branch: "main",
       repoUrl: "https://github.com/sofian/openscad-tray",
@@ -181,8 +179,7 @@ export const zipArchives: ZipArchives = {
     symlinks: { "tray.scad": "tray.scad" },
   },
   lasercut: {
-    description:
-      "Module for OpenSCAD, allowing 3D models to be created from 2D lasercut parts.",
+    description: "Module for OpenSCAD, allowing 3D models to be created from 2D lasercut parts.",
     gitOrigin: {
       branch: "master",
       repoUrl: "https://github.com/bmsleight/lasercut",
@@ -239,5 +236,5 @@ export const zipArchives: ZipArchives = {
 };
 
 export const deployedArchiveNames = Object.entries(zipArchives)
-  .filter(([_, { deployed }]) => deployed == null || deployed)
+  .filter(([, { deployed }]) => deployed == null || deployed)
   .map(([n]) => n);

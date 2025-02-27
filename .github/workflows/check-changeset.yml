@@ -1,0 +1,58 @@
+name: Check Changeset
+
+on:
+  pull_request:
+    branches: [ master, dev ]
+    # Ensures the workflow runs when PRs are opened, synchronized, or reopened
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  check-changeset:
+    name: Verify Changeset is Added
+    runs-on: ubuntu-latest
+    # Skip PRs that are in draft state
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+          run_install: false
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+          
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Check for Changeset
+        run: |
+          # Check if this is a PR to main branch that should contain a changeset
+          if [[ $(find .changeset -name "*.md" -not -name "README.md" -not -name "config.json" | wc -l) -eq 0 ]]; then
+            echo "::error::No changeset found in this PR. Please run 'pnpm changeset' to create one."
+            exit 1
+          else
+            echo "Changeset found. Good job!"
+          fi
+
+      - name: Comment on PR
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ No changeset detected! Please run `pnpm changeset` to document your changes.\n\nNeed help? Check out the [Changesets documentation](https://github.com/changesets/changesets/blob/main/docs/intro-to-using-changesets.md).'
+            }) 
