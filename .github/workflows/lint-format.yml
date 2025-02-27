@@ -2,7 +2,7 @@ name: Lint and Format Check
 
 on:
   pull_request:
-    branches: [ master, dev ]
+    branches: [ master ]
     
 jobs:
   lint-format:
