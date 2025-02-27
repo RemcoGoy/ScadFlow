@@ -17,9 +17,4 @@ export type IndexedPolyhedron = {
   colors: Color[];
 };
 
-export const DEFAULT_FACE_COLOR: Color = [
-  0xf9 / 255,
-  0xd7 / 255,
-  0x2c / 255,
-  1,
-];
+export const DEFAULT_FACE_COLOR: Color = [0xf9 / 255, 0xd7 / 255, 0x2c / 255, 1];

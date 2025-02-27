@@ -9,10 +9,8 @@ declare interface FS {
   lstatSync(path: string): { isDirectory(): boolean };
 }
 
-declare interface EmscriptenFS extends FS {}
-
 declare interface BrowserFSInterface {
-  EmscriptenFS: any;
+  FS: any;
   BFSRequire: (module: string) => any;
   install: (obj: any) => void;
   configure: (config: any, cb: (e?: Error) => void) => void;
@@ -31,7 +29,7 @@ declare interface BrowserFSInterface {
   WorkerFS?: any;
 }
 
-declare var BrowserFS: BrowserFSInterface;
+declare let BrowserFS: BrowserFSInterface;
 
 declare module "browserfs" {
   export = BrowserFS;

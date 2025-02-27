@@ -20,7 +20,7 @@ export const useScadStore = create<ScadState>()(
       }),
       {
         name: "scad-storage",
-      }
-    )
-  )
+      },
+    ),
+  ),
 );
