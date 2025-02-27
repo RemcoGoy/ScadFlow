@@ -1,10 +1,4 @@
-import {
-  Color,
-  DEFAULT_FACE_COLOR,
-  Face,
-  IndexedPolyhedron,
-  Vertex,
-} from "./common";
+import { Color, DEFAULT_FACE_COLOR, Face, IndexedPolyhedron, Vertex } from "./common";
 
 export function parseOff(content: string): IndexedPolyhedron {
   const lines = content
@@ -37,9 +31,7 @@ export function parseOff(content: string): IndexedPolyhedron {
   for (let i = 0; i < numVertices; i++) {
     const parts = lines[currentLine + i].split(/\s+/).map(Number);
     if (parts.length < 3 || parts.some(isNaN))
-      throw new Error(
-        `Invalid OFF file: invalid vertex at line ${currentLine + i + 1}`
-      );
+      throw new Error(`Invalid OFF file: invalid vertex at line ${currentLine + i + 1}`);
     vertices.push({ x: parts[0], y: parts[1], z: parts[2] });
   }
   currentLine += numVertices;
@@ -58,14 +50,12 @@ export function parseOff(content: string): IndexedPolyhedron {
             number,
             number,
             number,
-            number
+            number,
           ])
         : DEFAULT_FACE_COLOR;
     if (vertices.length < 3)
       throw new Error(
-        `Invalid OFF file: face at line ${
-          currentLine + i + 1
-        } must have at least 3 vertices`
+        `Invalid OFF file: face at line ${currentLine + i + 1} must have at least 3 vertices`,
       );
 
     const colorKey = color ? color.join(",") : "";

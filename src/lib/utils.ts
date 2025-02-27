@@ -1,7 +1,7 @@
 export function mapObject(
   o: any,
   f: (key: string, value: any) => any,
-  ifPred: (key: string) => boolean
+  ifPred: (key: string) => boolean,
 ) {
   const ret = [];
   for (const key of Object.keys(o)) {
@@ -15,9 +15,7 @@ export function mapObject(
 
 // In PWA mode, persist files in LocalStorage instead of the hash fragment.
 export function isInStandaloneMode() {
-  return Boolean(
-    "standalone" in window.navigator && window.navigator.standalone
-  );
+  return Boolean("standalone" in window.navigator && window.navigator.standalone);
 }
 
 export function readFileAsDataURL(file: File) {
@@ -39,9 +37,7 @@ export const listFilesystem = (scadInstance: any, directory = "/") => {
     const entries = scadInstance.FS.readdir(directory);
 
     // Filter out the . and .. entries
-    const filteredEntries = entries.filter(
-      (entry: string) => entry !== "." && entry !== ".."
-    );
+    const filteredEntries = entries.filter((entry: string) => entry !== "." && entry !== "..");
 
     // Log each entry and check if it's a directory
     filteredEntries.forEach((entry: string) => {

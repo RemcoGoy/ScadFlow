@@ -1,0 +1,35 @@
+name: Lint and Format Check
+
+on:
+  pull_request:
+    branches: [ master, dev ]
+    
+jobs:
+  lint-format:
+    name: Check Linting and Formatting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+          run_install: false
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'pnpm'
+          
+      - name: Install dependencies
+        run: pnpm install
+        
+      - name: Check linting
+        run: pnpm run lint
+        
+      - name: Check formatting
+        run: pnpm prettier --check "src/**/*.{js,jsx,ts,tsx,css,md}" 
