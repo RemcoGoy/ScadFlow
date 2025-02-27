@@ -2,7 +2,7 @@ name: Check Changeset
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ master, dev ]
     # Ensures the workflow runs when PRs are opened, synchronized, or reopened
     types: [opened, synchronize, reopened, ready_for_review]
 
