@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     # Skip PRs that are in draft state
     if: github.event.pull_request.draft == false
+    # Add permissions required to comment on PRs
+    permissions:
+      pull-requests: write
     
     steps:
       - name: Checkout code
