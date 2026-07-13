@@ -1,15 +1,25 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useScadStore, type ParamVariable } from "@/store/scadStore";
 
 export function parseScadVariables(code: string): ParamVariable[] {
   const vars: ParamVariable[] = [];
   const lines = code.split("\n");
 
-  // Regex matches: name = value; // [options]
-  const regex = /^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*([^;]+)\s*;\s*\/\/\s*\[([^\]]+)\]/i;
+  const groupRegex = /^\/\/\s*(?:category|group):\s*(.+)/i;
+  const varRegex = /^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*([^;]+)\s*;\s*\/\/\s*\[([^\]]+)\]/i;
+
+  let currentGroup = "Parameters";
 
   for (const line of lines) {
-    const match = line.trim().match(regex);
+    const trimmed = line.trim();
+
+    const groupMatch = trimmed.match(groupRegex);
+    if (groupMatch) {
+      currentGroup = groupMatch[1].trim();
+      continue;
+    }
+
+    const match = trimmed.match(varRegex);
     if (match) {
       const name = match[1];
       const origValStr = match[2].trim();
@@ -18,7 +28,6 @@ export function parseScadVariables(code: string): ParamVariable[] {
       let parsedVal: any = origValStr;
       let type: "number" | "string" | "boolean" = "string";
 
-      // Basic type evaluation
       if (origValStr === "true" || origValStr === "false") {
         parsedVal = origValStr === "true";
         type = "boolean";
@@ -30,9 +39,7 @@ export function parseScadVariables(code: string): ParamVariable[] {
         type = "string";
       }
 
-      // Parse custom options
       if (optionStr.includes(":")) {
-        // Slider: [min:max:step] or [min:max]
         const parts = optionStr.split(":").map(Number);
         if (parts.length >= 2) {
           vars.push({
@@ -43,10 +50,10 @@ export function parseScadVariables(code: string): ParamVariable[] {
             min: parts[0],
             max: parts[1],
             step: parts[2] ?? 1,
+            group: currentGroup,
           });
         }
       } else {
-        // Dropdown choices: [choice1, choice2]
         const choices = optionStr.split(",").map((c) => c.trim().replace(/^['"]|['"]$/g, ""));
         if (choices.length > 0) {
           vars.push({
@@ -55,6 +62,7 @@ export function parseScadVariables(code: string): ParamVariable[] {
             type: type,
             control: "select",
             choices,
+            group: currentGroup,
           });
         }
       }
@@ -68,14 +76,13 @@ export function Customizer({
 }: {
   onParametersChange: (vars: ParamVariable[]) => void;
 }) {
-  const { scadCode, variables, setVariables, toggleCustomizer } = useScadStore();
+  const { scadCode, variables, setVariables } = useScadStore();
   const initialParseDone = useRef(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-  // Parse variables from code when the code changes
   useEffect(() => {
     const parsed = parseScadVariables(scadCode);
 
-    // Merge existing user values with newly parsed variables to keep settings intact during typing
     const updatedVars = parsed.map((pv) => {
       const existing = variables.find((ev) => ev.name === pv.name);
       if (existing && typeof existing.value === typeof pv.value) {
@@ -87,6 +94,34 @@ export function Customizer({
     setVariables(updatedVars);
     initialParseDone.current = true;
   }, [scadCode]);
+
+  const groups: Record<string, ParamVariable[]> = {};
+  for (const v of variables) {
+    const groupName = v.group || "Parameters";
+    if (!groups[groupName]) {
+      groups[groupName] = [];
+    }
+    groups[groupName].push(v);
+  }
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const updated = { ...prev };
+      for (const g of Object.keys(groups)) {
+        if (updated[g] === undefined) {
+          updated[g] = true;
+        }
+      }
+      return updated;
+    });
+  }, [variables]);
+
+  const toggleGroup = (groupName: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupName]: !prev[groupName],
+    }));
+  };
 
   const handleValueChange = (name: string, value: any) => {
     const updated = variables.map((v) => {
@@ -100,88 +135,116 @@ export function Customizer({
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-t border-zinc-900 text-zinc-300">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 bg-zinc-950 select-none">
-        <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-          Parameters Customizer
-        </h2>
-        <button
-          onClick={toggleCustomizer}
-          className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
-          title="Minimize Parameters"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      </div>
-      <div className="flex-1 p-4 overflow-y-auto space-y-4">
+    <div className="flex flex-col h-full bg-panel-bg text-zinc-300">
+      {/* Property Groups List - Flat Sidebar Design */}
+      <div className="flex-1 overflow-y-auto divide-y divide-border-figma no-scrollbar">
         {variables.length === 0 ? (
-          <div className="text-zinc-500 italic text-xs text-center">
-            No customizer variables detected. Annotate variable lines with comments e.g.:
-            <div className="font-mono text-zinc-600 mt-2 bg-zinc-900 p-2 rounded text-[10px] text-left not-italic">
-              size = 20; // [10:100:1]
+          <div className="text-zinc-600 italic text-[11px] text-center flex flex-col items-center justify-center p-6 select-none">
+            <span>No parameters parsed.</span>
+            <div className="font-mono text-zinc-650 mt-2 bg-[#0b0e14]/50 border border-border-figma p-2.5 rounded text-[9px] text-left not-italic w-full leading-normal">
+              // Group: Dimensions
               <br />
-              shape = "cube"; // [cube, sphere]
+              size = 20; // [10:100:1]
             </div>
           </div>
         ) : (
-          variables.map((v) => (
-            <div key={v.name} className="flex flex-col space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium text-zinc-400">{v.name}</span>
-                <span className="font-mono text-blue-400 text-[11px] bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
-                  {String(v.value)}
-                </span>
-              </div>
+          Object.entries(groups).map(([groupName, groupVars]) => {
+            const isExpanded = expandedGroups[groupName] ?? true;
 
-              {v.control === "slider" ? (
-                <div className="flex items-center space-x-3">
-                  <span className="text-[10px] text-zinc-600 font-mono w-6 text-right select-none">
-                    {v.min}
-                  </span>
-                  <input
-                    type="range"
-                    min={v.min}
-                    max={v.max}
-                    step={v.step}
-                    value={v.value}
-                    onChange={(e) => handleValueChange(v.name, Number(e.target.value))}
-                    className="flex-1 h-1 bg-zinc-850 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                  />
-                  <span className="text-[10px] text-zinc-600 font-mono w-6 select-none">
-                    {v.max}
-                  </span>
-                </div>
-              ) : v.control === "select" ? (
-                <select
-                  value={String(v.value)}
-                  onChange={(e) => {
-                    const val =
-                      v.type === "number"
-                        ? Number(e.target.value)
-                        : v.type === "boolean"
-                          ? e.target.value === "true"
-                          : e.target.value;
-                    handleValueChange(v.name, val);
-                  }}
-                  className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md py-1.5 px-2 text-xs focus:outline-none focus:border-blue-500"
+            return (
+              <div key={groupName} className="bg-panel-bg">
+                {/* Flat accordion group header */}
+                <button
+                  onClick={() => toggleGroup(groupName)}
+                  className="w-full flex items-center justify-between px-3.5 py-1.5 hover:bg-[#1e293b]/20 transition-colors text-[10px] font-bold text-zinc-500 select-none uppercase tracking-wider"
                 >
-                  {v.choices?.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-          ))
+                  <div className="flex items-center space-x-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-scad-amber shadow-sm shadow-scad-amber/30" />
+                    <span>{groupName}</span>
+                  </div>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-3 w-3 transform text-zinc-500 transition-transform duration-150 ${
+                      isExpanded ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2.5}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+
+                {/* Properties fields */}
+                {isExpanded && (
+                  <div className="px-3.5 pb-3.5 pt-1 space-y-3">
+                    {groupVars.map((v) => (
+                      <div key={v.name} className="flex items-center space-x-2">
+                        {/* Label */}
+                        <span
+                          className="w-1/3 text-[10px] text-zinc-400 truncate select-none font-sans font-medium"
+                          title={v.name}
+                        >
+                          {v.name}
+                        </span>
+
+                        {/* Controls */}
+                        <div className="w-2/3 flex items-center space-x-2">
+                          {v.control === "slider" ? (
+                            <>
+                              <input
+                                type="range"
+                                min={v.min}
+                                max={v.max}
+                                step={v.step}
+                                value={v.value}
+                                onChange={(e) => handleValueChange(v.name, Number(e.target.value))}
+                                className="figma-slider flex-1"
+                              />
+                              <input
+                                type="text"
+                                value={String(v.value)}
+                                onChange={(e) => {
+                                  const num = Number(e.target.value);
+                                  if (!isNaN(num)) handleValueChange(v.name, num);
+                                }}
+                                className="w-11 bg-[#0b0e14] border border-border-figma text-zinc-300 font-mono text-[10px] rounded px-1 py-0.5 text-center focus:outline-none focus:border-scad-amber"
+                              />
+                            </>
+                          ) : v.control === "select" ? (
+                            <select
+                              value={String(v.value)}
+                              onChange={(e) => {
+                                const val =
+                                  v.type === "number"
+                                    ? Number(e.target.value)
+                                    : v.type === "boolean"
+                                      ? e.target.value === "true"
+                                      : e.target.value;
+                                handleValueChange(v.name, val);
+                              }}
+                              className="w-full bg-[#0b0e14] border border-border-figma text-zinc-300 rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus:border-scad-amber cursor-pointer transition-colors"
+                            >
+                              {v.choices?.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

@@ -24,6 +24,7 @@ export interface ParamVariable {
   max?: number;
   step?: number;
   choices?: string[];
+  group?: string;
 }
 
 interface ScadState {
@@ -37,6 +38,12 @@ interface ScadState {
   showConsole: boolean;
   showCustomizer: boolean;
   showSidebar: boolean;
+  openFiles: string[];
+  viewMode: "shaded" | "wireframe" | "shaded-wireframe";
+  cameraType: "perspective" | "orthographic";
+  environment: "neutral" | "sunset" | "studio";
+  logFilter: string;
+  autoRender: boolean;
   setScadCode: (scadCode: string) => void;
   setModelUrl: (modelUrl: string) => void;
   setActiveFilePath: (path: string) => void;
@@ -48,6 +55,13 @@ interface ScadState {
   toggleConsole: () => void;
   toggleCustomizer: () => void;
   toggleSidebar: () => void;
+  openFile: (path: string) => void;
+  closeFile: (path: string) => void;
+  setViewMode: (mode: "shaded" | "wireframe" | "shaded-wireframe") => void;
+  setCameraType: (type: "perspective" | "orthographic") => void;
+  setEnvironment: (env: "neutral" | "sunset" | "studio") => void;
+  setLogFilter: (filter: string) => void;
+  setAutoRender: (autoRender: boolean) => void;
 }
 
 export const useScadStore = create<ScadState>()(
@@ -82,6 +96,12 @@ draw_object();
         showConsole: true,
         showCustomizer: true,
         showSidebar: true,
+        openFiles: ["/main.scad"],
+        viewMode: "shaded",
+        cameraType: "perspective",
+        environment: "neutral",
+        logFilter: "",
+        autoRender: true,
         setScadCode: (scadCode) => set({ scadCode }),
         setModelUrl: (modelUrl) => set({ modelUrl }),
         setActiveFilePath: (path) => set({ activeFilePath: path }),
@@ -103,6 +123,31 @@ draw_object();
         toggleConsole: () => set((state) => ({ showConsole: !state.showConsole })),
         toggleCustomizer: () => set((state) => ({ showCustomizer: !state.showCustomizer })),
         toggleSidebar: () => set((state) => ({ showSidebar: !state.showSidebar })),
+        openFile: (path) =>
+          set((state) => {
+            const alreadyOpen = state.openFiles.includes(path);
+            return {
+              openFiles: alreadyOpen ? state.openFiles : [...state.openFiles, path],
+              activeFilePath: path,
+            };
+          }),
+        closeFile: (path) =>
+          set((state) => {
+            const remaining = state.openFiles.filter((f) => f !== path);
+            let nextActive = state.activeFilePath;
+            if (state.activeFilePath === path) {
+              nextActive = remaining.length > 0 ? remaining[remaining.length - 1] : "";
+            }
+            return {
+              openFiles: remaining,
+              activeFilePath: nextActive,
+            };
+          }),
+        setViewMode: (viewMode) => set({ viewMode }),
+        setCameraType: (cameraType) => set({ cameraType }),
+        setEnvironment: (environment) => set({ environment }),
+        setLogFilter: (logFilter) => set({ logFilter }),
+        setAutoRender: (autoRender) => set({ autoRender }),
       }),
       {
         name: "scad-storage",
@@ -112,6 +157,11 @@ draw_object();
           showConsole: state.showConsole,
           showCustomizer: state.showCustomizer,
           showSidebar: state.showSidebar,
+          openFiles: state.openFiles,
+          viewMode: state.viewMode,
+          cameraType: state.cameraType,
+          environment: state.environment,
+          autoRender: state.autoRender,
         }),
       },
     ),

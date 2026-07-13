@@ -12,13 +12,15 @@ const getBfs = () => {
 };
 
 export function Sidebar() {
-  const { filesList, setFilesList, activeFilePath, setActiveFilePath, setScadCode } =
+  const { filesList, setFilesList, activeFilePath, openFile, closeFile, setScadCode } =
     useScadStore();
 
   const [newFileName, setNewFileName] = useState("");
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [selectedFolderForNewItem, setSelectedFolderForNewItem] = useState("/");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
   const bfs = getBfs();
 
@@ -32,7 +34,6 @@ export function Sidebar() {
     refreshFileTree();
   }, []);
 
-  // Scan BrowserFS tree recursively
   const readBfsDirectoryTree = (fs: any, dirPath = "/"): FileItem[] => {
     const items: FileItem[] = [];
     try {
@@ -70,7 +71,7 @@ export function Sidebar() {
   const handleOpenLocalDirectory = async () => {
     if (!isFileSystemAccessSupported) {
       alert(
-        "File System Access API is not supported in this browser. Please use a Chromium-based browser (Chrome, Edge, Opera) for local folder mapping.",
+        "File System Access API is not supported in this browser. Please map files individually or use Chrome/Edge for local folder mapping.",
       );
       return;
     }
@@ -79,7 +80,6 @@ export function Sidebar() {
       if (bfs) {
         await syncDirectoryHandleToBrowserFS(handle, bfs, "/");
         refreshFileTree();
-        // Set default main.scad or input.scad if exists
         const rootFiles = bfs.readdirSync("/");
         const scadFile = rootFiles.find((f: string) => f.endsWith(".scad"));
         if (scadFile) {
@@ -95,7 +95,7 @@ export function Sidebar() {
     if (!bfs) return;
     try {
       const content = bfs.readFileSync(path, { encoding: "utf8" });
-      setActiveFilePath(path);
+      openFile(path);
       setScadCode(content);
     } catch (e) {
       console.error("Error opening file:", e);
@@ -145,10 +145,7 @@ export function Sidebar() {
         bfs.rmdirSync(path);
       } else {
         bfs.unlinkSync(path);
-        if (activeFilePath === path) {
-          setActiveFilePath("");
-          setScadCode("");
-        }
+        closeFile(path);
       }
       refreshFileTree();
     } catch (err: any) {
@@ -191,211 +188,142 @@ export function Sidebar() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "scadflow_project.zip";
+    link.download = "project.zip";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  const renderTreeNodes = (nodes: FileItem[]) => {
-    return nodes.map((node) => (
-      <div key={node.path} className="pl-3">
-        <div
-          className={`flex items-center justify-between py-1.5 px-2 rounded-md cursor-pointer hover:bg-zinc-800 transition-colors ${
-            activeFilePath === node.path
-              ? "bg-blue-600/30 text-blue-400 font-medium"
-              : "text-zinc-300"
-          }`}
-          onClick={() => {
-            if (node.isDir) {
-              setSelectedFolderForNewItem(node.path);
-            } else {
-              handleOpenFile(node.path);
-            }
-          }}
-        >
-          <div className="flex items-center space-x-2 truncate">
-            {node.isDir ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4.5 w-4.5 text-yellow-500 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                />
-              </svg>
-            ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4.5 w-4.5 text-blue-400 flex-shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            )}
-            <span className="text-sm truncate select-none">{node.name}</span>
-          </div>
-
-          <button
-            onClick={(e) => handleDeleteItem(node.path, node.isDir, e)}
-            className="text-zinc-500 hover:text-red-500 p-0.5 opacity-0 group-hover:opacity-100 hover:bg-zinc-700/50 rounded transition-opacity"
-            title="Delete"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </button>
-        </div>
-        {node.children && node.children.length > 0 && (
-          <div className="border-l border-zinc-800 ml-3.5 mt-0.5 pl-1.5">
-            {renderTreeNodes(node.children)}
-          </div>
-        )}
-      </div>
-    ));
+  const toggleFolderCollapse = (path: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCollapsedFolders((prev) => ({
+      ...prev,
+      [path]: !prev[path],
+    }));
   };
 
-  return (
-    <div className="flex flex-col h-full bg-zinc-950 w-full text-zinc-300">
-      {/* Workspace controls */}
-      <div className="p-4 border-b border-zinc-900 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
-            Workspace
-          </h2>
-          <div className="flex space-x-1.5">
-            <button
-              onClick={() => {
-                setSelectedFolderForNewItem("/");
-                setIsCreatingFile(true);
-                setIsCreatingFolder(false);
-              }}
-              className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors"
-              title="New File"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={() => {
-                setSelectedFolderForNewItem("/");
-                setIsCreatingFolder(true);
-                setIsCreatingFile(false);
-              }}
-              className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors"
-              title="New Folder"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={refreshFileTree}
-              className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors"
-              title="Refresh"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
+  // Filter items based on search query
+  const filterTree = (nodes: FileItem[], query: string): FileItem[] => {
+    if (!query) return nodes;
+    const lowerQuery = query.toLowerCase();
+    return nodes
+      .map((node) => {
+        if (node.isDir && node.children) {
+          const filteredChildren = filterTree(node.children, query);
+          if (filteredChildren.length > 0 || node.name.toLowerCase().includes(lowerQuery)) {
+            return { ...node, children: filteredChildren };
+          }
+        } else if (node.name.toLowerCase().includes(lowerQuery)) {
+          return node;
+        }
+        return null;
+      })
+      .filter((node): node is FileItem => node !== null);
+  };
 
-        {/* Action button */}
+  const renderTreeNodes = (nodes: FileItem[]) => {
+    return nodes.map((node) => {
+      const isCollapsed = collapsedFolders[node.path] ?? false;
+      const isActive = activeFilePath === node.path;
+
+      return (
+        <div key={node.path} className="pl-1 select-none">
+          <div
+            className={`group/item flex items-center justify-between py-1 px-3 rounded cursor-pointer transition-all duration-100 ${
+              isActive
+                ? "bg-[#2a2015] text-scad-amber font-semibold border-none"
+                : "text-zinc-400 hover:text-zinc-250 hover:bg-[#131924]/20"
+            }`}
+            onClick={(e) => {
+              if (node.isDir) {
+                toggleFolderCollapse(node.path, e);
+              } else {
+                handleOpenFile(node.path);
+              }
+            }}
+          >
+            <div className="flex items-center space-x-2 truncate flex-1 text-[11px] font-mono">
+              {/* Amber Dot indicator matching the ScadForge file row style */}
+              <span className="text-scad-amber text-[10px] leading-none select-none">●</span>
+              <span className="truncate">{node.name}</span>
+            </div>
+
+            {/* Flat delete action button */}
+            <div className="flex items-center space-x-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => handleDeleteItem(node.path, node.isDir, e)}
+                className={`p-0.5 rounded transition-colors ${
+                  isActive
+                    ? "text-scad-amber/80 hover:text-scad-amber hover:bg-white/5"
+                    : "text-zinc-650 hover:text-red-400 hover:bg-[#1a2232]"
+                }`}
+                title="Delete"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-3 w-3"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {node.isDir && !isCollapsed && node.children && node.children.length > 0 && (
+            <div className="border-l border-zinc-800 ml-1.5 mt-0.5 pl-0.5">
+              {renderTreeNodes(node.children)}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
+  const filteredTree = filterTree(filesList, searchQuery);
+
+  return (
+    <div className="flex flex-col h-full bg-panel-bg w-full text-zinc-350">
+      {/* File Action Buttons Panel matching the design mock */}
+      <div className="p-3 border-b border-border-figma flex space-x-2">
+        <button
+          onClick={() => {
+            setSelectedFolderForNewItem("/");
+            setIsCreatingFile(true);
+            setIsCreatingFolder(false);
+          }}
+          className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
+        >
+          + New
+        </button>
         <button
           onClick={handleOpenLocalDirectory}
-          className="w-full text-center flex items-center justify-center space-x-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-200 font-medium py-1.5 px-3 rounded-md text-xs hover:border-zinc-700 transition-all active:scale-[0.98]"
+          className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 text-blue-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5M5 19v-4m14 4v-4m0 0l-3-3m3 3l3-3"
-            />
-          </svg>
-          <span>Map Local Folder</span>
+          ↑ Upload
         </button>
       </div>
 
-      {/* Creation modals inline */}
+      {/* Creation fields modal */}
       {(isCreatingFile || isCreatingFolder) && (
-        <div className="p-3 bg-zinc-900/50 border-b border-zinc-900 space-y-2">
-          <span className="text-[10px] text-zinc-400 font-semibold uppercase block">
-            New {isCreatingFile ? "File" : "Folder"} under {selectedFolderForNewItem}
+        <div className="p-3 bg-[#141822] border-b border-border-figma space-y-2">
+          <span className="text-[9px] text-scad-amber font-bold uppercase tracking-wider block">
+            New {isCreatingFile ? "File" : "Folder"}
           </span>
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1">
             <input
               type="text"
               value={newFileName}
               onChange={(e) => setNewFileName(e.target.value)}
               placeholder={isCreatingFile ? "model.scad" : "components"}
-              className="bg-zinc-950 border border-zinc-800 text-zinc-100 rounded py-1 px-2 text-xs flex-1 focus:outline-none focus:border-blue-500"
+              className="bg-[#0b0e14] border border-border-figma text-zinc-150 rounded py-0.5 px-2 text-[11px] flex-1 focus:outline-none focus:border-scad-amber"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -412,20 +340,20 @@ export function Sidebar() {
               }}
             />
           </div>
-          <div className="flex justify-end space-x-1">
+          <div className="flex justify-end space-x-1.5">
             <button
               onClick={() => {
                 setIsCreatingFile(false);
                 setIsCreatingFolder(false);
                 setNewFileName("");
               }}
-              className="py-0.5 px-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[10px]"
+              className="py-0.5 px-2 bg-zinc-800 hover:bg-[#383838] text-zinc-400 rounded text-[9px]"
             >
               Cancel
             </button>
             <button
               onClick={isCreatingFile ? handleCreateFile : handleCreateFolder}
-              className="py-0.5 px-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px]"
+              className="py-0.5 px-2 bg-scad-amber text-[#0b0e14] font-bold rounded text-[9px]"
             >
               Create
             </button>
@@ -433,29 +361,43 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Files List Tree */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 group">
-        {filesList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-center px-4">
-            <span className="text-zinc-500 text-xs italic">Workspace is empty</span>
-            <span className="text-[10px] text-zinc-600 mt-1">
-              Create a file or map a local directory to begin.
-            </span>
-          </div>
-        ) : (
-          renderTreeNodes(filesList)
-        )}
+      {/* Sources Flat Section List */}
+      <div className="p-3 select-none">
+        <h3 className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase font-sans mb-2">
+          SOURCES
+        </h3>
+        <div className="space-y-0.5">
+          {filteredTree.length === 0 ? (
+            <div className="text-zinc-650 italic text-[10px] pl-3 py-1">No files available</div>
+          ) : (
+            renderTreeNodes(filteredTree)
+          )}
+        </div>
       </div>
 
-      {/* Sidebar Footer options */}
-      <div className="p-3 border-t border-zinc-900 bg-zinc-950 flex flex-col space-y-1.5">
-        <button
-          onClick={handleExportZip}
-          className="w-full text-center flex items-center justify-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-1.5 px-3 rounded-md text-xs transition-all active:scale-[0.98]"
-        >
+      {/* References Info block matching mockup */}
+      <div className="p-3 border-t border-border-figma/40 bg-[#0d1117]/30 select-none">
+        <h3 className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase font-sans mb-1.5">
+          REFERENCES
+        </h3>
+        <p className="text-[10px] text-zinc-550 leading-relaxed font-sans">
+          Upload STL/OFF/DXF/SVG/PNG to include or import from your .scad code.
+        </p>
+      </div>
+
+      {/* Search and Backup options */}
+      <div className="mt-auto p-3 border-t border-border-figma bg-[#0d1117]/20 flex flex-col space-y-2">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search Sources"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#131720] border border-border-figma hover:border-zinc-700 focus:border-scad-amber text-zinc-200 rounded py-0.5 pl-6 text-[10px] focus:outline-none transition-colors font-sans"
+          />
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
+            className="absolute left-1.5 top-1 h-3 w-3 text-zinc-600"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -464,10 +406,16 @@ export function Sidebar() {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
             />
           </svg>
-          <span>Export Workspace ZIP</span>
+        </div>
+
+        <button
+          onClick={handleExportZip}
+          className="w-full text-center flex items-center justify-center space-x-1 bg-[#131924] hover:bg-[#1a2232] text-zinc-400 font-semibold py-1 rounded text-[10px] border border-border-figma hover:text-zinc-250 transition-colors"
+        >
+          <span>Backup ZIP</span>
         </button>
       </div>
     </div>
