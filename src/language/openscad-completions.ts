@@ -206,7 +206,7 @@ export async function buildOpenSCADCompletionItemProvider() {
           const folderName = folderPrefix == "" ? "" : "/" + folderPrefix;
           let files: string[] | null = null;
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          for (const folder of [join("/libraries", folderName), join(workingDir, folderName)]) {
+          for (const _folder of [join("/libraries", folderName), join(workingDir, folderName)]) {
             files = folderPrefix == "" ? [...Object.keys(allSymlinks)] : [];
             try {
               // Mock implementation since we can't import fs

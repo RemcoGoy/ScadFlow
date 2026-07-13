@@ -4,7 +4,11 @@ import openscadEditorOptions from "@/language/openscad-editor-options";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import Editor, { loader, Monaco } from "@monaco-editor/react";
 
-// const isMonacoSupported = false;
+const getBfs = () => {
+  const windowObj = (typeof window === "object" ? window : self) as any;
+  return windowObj.BrowserFS ? windowObj.BrowserFS.BFSRequire("fs") : null;
+};
+
 const isMonacoSupported = (() => {
   const ua = window.navigator.userAgent;
   const iosWk = ua.match(/iPad|iPhone/i) && ua.match(/WebKit/i);
@@ -16,9 +20,22 @@ if (isMonacoSupported) {
   loader.init().then((mi) => (monacoInstance = mi));
 }
 
-export function ScadEditor() {
-  const { scadCode, setScadCode } = useScadStore();
+interface ScadEditorProps {
+  onCompileTrigger: () => void;
+}
+
+export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
+  const { scadCode, setScadCode, activeFilePath } = useScadStore();
   const [editor, setEditor] = useState(null as monaco.editor.IStandaloneCodeEditor | null);
+
+  // Debounced auto-compilation (1000ms delay after typing)
+  useEffect(() => {
+    if (!scadCode) return;
+    const timer = setTimeout(() => {
+      onCompileTrigger();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [scadCode]);
 
   if (editor) {
     const checkerRun = { markers: [] };
@@ -30,10 +47,6 @@ export function ScadEditor() {
     }
   }
 
-  useEffect(() => {
-    setScadCode(scadCode);
-  }, []);
-
   const handleChange = (value: string | undefined) => {
     if (value !== undefined) {
       setScadCode(value);
@@ -41,27 +54,33 @@ export function ScadEditor() {
   };
 
   const onMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
+    // F5 key or Compile action
     editor.addAction({
-      id: "openscad-render",
-      label: "Render OpenSCAD",
-      run: () => {},
+      id: "openscad-compile",
+      label: "Compile OpenSCAD",
+      keybindings: [monaco.KeyCode.F5],
+      run: () => {
+        onCompileTrigger();
+      },
     });
+
+    // Save action (Ctrl+S)
     editor.addAction({
-      id: "openscad-preview",
-      label: "Preview OpenSCAD",
-      run: () => {},
-    });
-    editor.addAction({
-      id: "openscad-save-do-nothing",
-      label: "Save (disabled)",
+      id: "openscad-save",
+      label: "Save OpenSCAD",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-      run: () => {},
-    });
-    editor.addAction({
-      id: "openscad-save-project",
-      label: "Save OpenSCAD project",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS],
-      run: () => {},
+      run: (ed) => {
+        const val = ed.getValue();
+        const bfs = getBfs();
+        if (bfs && activeFilePath) {
+          try {
+            bfs.writeFileSync(activeFilePath, val);
+            console.log(`Saved file to BrowserFS: ${activeFilePath}`);
+          } catch (e) {
+            console.error(`Failed to save file ${activeFilePath}:`, e);
+          }
+        }
+      },
     });
 
     setEditor(editor);
@@ -71,7 +90,7 @@ export function ScadEditor() {
     <div className="scad-editor h-full">
       <Editor
         value={scadCode}
-        // theme="vs-dark"
+        theme="vs-dark"
         defaultLanguage="openscad"
         onChange={handleChange}
         onMount={onMount}

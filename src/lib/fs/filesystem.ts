@@ -1,8 +1,7 @@
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
+import * as BrowserFS from "browserfs";
 import { deployedArchiveNames, zipArchives } from "./zip-archives";
-
-declare let BrowserFS: BrowserFSInterface;
 
 export type FSMounts = {
   [n: string]: { fs: string; options: { zipData: Buffer } };
@@ -117,7 +116,10 @@ export async function createEditorFS({
       },
       writable: allowPersistence
         ? {
-            fs: "LocalStorage",
+            fs: "IndexedDB",
+            options: {
+              storeName: "scadflow-workspace",
+            },
           }
         : {
             fs: "InMemory",
