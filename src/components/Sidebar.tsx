@@ -281,7 +281,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border-r border-zinc-900 w-64 text-zinc-300">
+    <div className="flex flex-col h-full bg-zinc-950 w-full text-zinc-300">
       {/* Workspace controls */}
       <div className="p-4 border-b border-zinc-900 space-y-3">
         <div className="flex items-center justify-between">

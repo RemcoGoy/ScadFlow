@@ -68,7 +68,7 @@ export function Customizer({
 }: {
   onParametersChange: (vars: ParamVariable[]) => void;
 }) {
-  const { scadCode, variables, setVariables } = useScadStore();
+  const { scadCode, variables, setVariables, toggleCustomizer } = useScadStore();
   const initialParseDone = useRef(false);
 
   // Parse variables from code when the code changes
@@ -99,75 +99,90 @@ export function Customizer({
     onParametersChange(updated);
   };
 
-  if (variables.length === 0) {
-    return (
-      <div className="p-4 bg-zinc-950 text-zinc-500 italic text-xs text-center border-t border-zinc-900">
-        No customizer variables detected. Annotate variable lines with comments e.g.:
-        <div className="font-mono text-zinc-600 mt-2 bg-zinc-900 p-2 rounded text-[10px] text-left not-italic">
-          size = 20; // [10:100:1]
-          <br />
-          shape = "cube"; // [cube, sphere]
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full bg-zinc-950 border-t border-zinc-900 text-zinc-300">
-      <div className="flex items-center px-4 py-2 border-b border-zinc-900 bg-zinc-950 select-none">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 bg-zinc-950 select-none">
         <h2 className="text-xs font-semibold tracking-wider text-zinc-400 uppercase">
           Parameters Customizer
         </h2>
+        <button
+          onClick={toggleCustomizer}
+          className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
+          title="Minimize Parameters"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
       </div>
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
-        {variables.map((v) => (
-          <div key={v.name} className="flex flex-col space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-zinc-400">{v.name}</span>
-              <span className="font-mono text-blue-400 text-[11px] bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
-                {String(v.value)}
-              </span>
+        {variables.length === 0 ? (
+          <div className="text-zinc-500 italic text-xs text-center">
+            No customizer variables detected. Annotate variable lines with comments e.g.:
+            <div className="font-mono text-zinc-600 mt-2 bg-zinc-900 p-2 rounded text-[10px] text-left not-italic">
+              size = 20; // [10:100:1]
+              <br />
+              shape = "cube"; // [cube, sphere]
             </div>
-
-            {v.control === "slider" ? (
-              <div className="flex items-center space-x-3">
-                <span className="text-[10px] text-zinc-600 font-mono w-6 text-right select-none">
-                  {v.min}
-                </span>
-                <input
-                  type="range"
-                  min={v.min}
-                  max={v.max}
-                  step={v.step}
-                  value={v.value}
-                  onChange={(e) => handleValueChange(v.name, Number(e.target.value))}
-                  className="flex-1 h-1 bg-zinc-850 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                />
-                <span className="text-[10px] text-zinc-600 font-mono w-6 select-none">{v.max}</span>
-              </div>
-            ) : v.control === "select" ? (
-              <select
-                value={String(v.value)}
-                onChange={(e) => {
-                  const val =
-                    v.type === "number"
-                      ? Number(e.target.value)
-                      : v.type === "boolean"
-                        ? e.target.value === "true"
-                        : e.target.value;
-                  handleValueChange(v.name, val);
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md py-1.5 px-2 text-xs focus:outline-none focus:border-blue-500"
-              >
-                {v.choices?.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            ) : null}
           </div>
-        ))}
+        ) : (
+          variables.map((v) => (
+            <div key={v.name} className="flex flex-col space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-zinc-400">{v.name}</span>
+                <span className="font-mono text-blue-400 text-[11px] bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                  {String(v.value)}
+                </span>
+              </div>
+
+              {v.control === "slider" ? (
+                <div className="flex items-center space-x-3">
+                  <span className="text-[10px] text-zinc-600 font-mono w-6 text-right select-none">
+                    {v.min}
+                  </span>
+                  <input
+                    type="range"
+                    min={v.min}
+                    max={v.max}
+                    step={v.step}
+                    value={v.value}
+                    onChange={(e) => handleValueChange(v.name, Number(e.target.value))}
+                    className="flex-1 h-1 bg-zinc-850 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                  <span className="text-[10px] text-zinc-600 font-mono w-6 select-none">
+                    {v.max}
+                  </span>
+                </div>
+              ) : v.control === "select" ? (
+                <select
+                  value={String(v.value)}
+                  onChange={(e) => {
+                    const val =
+                      v.type === "number"
+                        ? Number(e.target.value)
+                        : v.type === "boolean"
+                          ? e.target.value === "true"
+                          : e.target.value;
+                    handleValueChange(v.name, val);
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md py-1.5 px-2 text-xs focus:outline-none focus:border-blue-500"
+                >
+                  {v.choices?.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

@@ -34,6 +34,9 @@ interface ScadState {
   logs: LogEntry[];
   isCompiling: boolean;
   variables: ParamVariable[];
+  showConsole: boolean;
+  showCustomizer: boolean;
+  showSidebar: boolean;
   setScadCode: (scadCode: string) => void;
   setModelUrl: (modelUrl: string) => void;
   setActiveFilePath: (path: string) => void;
@@ -42,6 +45,9 @@ interface ScadState {
   clearLogs: () => void;
   setCompiling: (isCompiling: boolean) => void;
   setVariables: (variables: ParamVariable[]) => void;
+  toggleConsole: () => void;
+  toggleCustomizer: () => void;
+  toggleSidebar: () => void;
 }
 
 export const useScadStore = create<ScadState>()(
@@ -73,6 +79,9 @@ draw_object();
         logs: [],
         isCompiling: false,
         variables: [],
+        showConsole: true,
+        showCustomizer: true,
+        showSidebar: true,
         setScadCode: (scadCode) => set({ scadCode }),
         setModelUrl: (modelUrl) => set({ modelUrl }),
         setActiveFilePath: (path) => set({ activeFilePath: path }),
@@ -91,12 +100,18 @@ draw_object();
         clearLogs: () => set({ logs: [] }),
         setCompiling: (isCompiling) => set({ isCompiling }),
         setVariables: (variables) => set({ variables }),
+        toggleConsole: () => set((state) => ({ showConsole: !state.showConsole })),
+        toggleCustomizer: () => set((state) => ({ showCustomizer: !state.showCustomizer })),
+        toggleSidebar: () => set((state) => ({ showSidebar: !state.showSidebar })),
       }),
       {
         name: "scad-storage",
         partialize: (state) => ({
           scadCode: state.scadCode,
           activeFilePath: state.activeFilePath,
+          showConsole: state.showConsole,
+          showCustomizer: state.showCustomizer,
+          showSidebar: state.showSidebar,
         }),
       },
     ),
