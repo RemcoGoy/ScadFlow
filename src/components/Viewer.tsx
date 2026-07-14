@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import * as THREE from "three";
 import { useScadStore } from "../store/scadStore";
 
 declare global {
@@ -19,7 +20,7 @@ declare global {
 import "@google/model-viewer";
 
 export function Viewer() {
-  const { modelUrl } = useScadStore();
+  const { modelUrl, viewMode, setViewMode } = useScadStore();
   const modelViewerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -42,6 +43,80 @@ export function Viewer() {
       modelViewerRef.current.autoRotate = autoRotate;
     }
   }, [autoRotate, modelUrl]);
+
+  useEffect(() => {
+    const modelViewer = modelViewerRef.current;
+    if (!modelViewer) return;
+
+    const applyViewMode = () => {
+      const sceneSymbol = Object.getOwnPropertySymbols(modelViewer).find(
+        (s) => s.description === "scene",
+      );
+      if (!sceneSymbol) return;
+      const scene = modelViewer[sceneSymbol];
+      if (!scene) return;
+
+      scene.traverse((child: any) => {
+        if (child.isMesh) {
+          // Remove existing custom edge lines
+          const existingEdges = child.children.filter(
+            (c: any) => c.userData && c.userData.isScadEdges,
+          );
+          existingEdges.forEach((edgesObj: any) => {
+            child.remove(edgesObj);
+            if (edgesObj.geometry) edgesObj.geometry.dispose();
+            if (edgesObj.material) edgesObj.material.dispose();
+          });
+
+          if (viewMode === "shaded") {
+            if (child.material) {
+              child.material.wireframe = false;
+              child.material.visible = true;
+              child.material.needsUpdate = true;
+            }
+          } else if (viewMode === "wireframe") {
+            if (child.material) {
+              child.material.wireframe = true;
+              child.material.visible = true;
+              child.material.needsUpdate = true;
+            }
+          } else if (viewMode === "shaded-wireframe") {
+            if (child.material) {
+              child.material.wireframe = false;
+              child.material.visible = true;
+              child.material.needsUpdate = true;
+            }
+
+            const geometry = child.geometry;
+            if (geometry) {
+              const edgesGeo = new THREE.EdgesGeometry(geometry, 20);
+              const lineMat = new THREE.LineBasicMaterial({
+                color: 0x111111,
+              });
+              const lineSegments = new THREE.LineSegments(edgesGeo, lineMat);
+              lineSegments.userData = { isScadEdges: true };
+              child.add(lineSegments);
+            }
+          }
+        }
+      });
+
+      if (typeof scene.queueRender === "function") {
+        scene.queueRender();
+      }
+    };
+
+    const handleLoad = () => {
+      applyViewMode();
+    };
+
+    modelViewer.addEventListener("load", handleLoad);
+    applyViewMode();
+
+    return () => {
+      modelViewer.removeEventListener("load", handleLoad);
+    };
+  }, [modelUrl, viewMode]);
 
   const handleResetCamera = () => {
     if (modelViewerRef.current) {
@@ -69,6 +144,12 @@ export function Viewer() {
       if (prev === 1.6) return 0.5;
       return 1.0;
     });
+  };
+
+  const handleRotateViewMode = () => {
+    if (viewMode === "shaded") setViewMode("shaded-wireframe");
+    else if (viewMode === "shaded-wireframe") setViewMode("wireframe");
+    else setViewMode("shaded");
   };
 
   return (
@@ -156,6 +237,15 @@ export function Viewer() {
           title="Change View Exposure"
         >
           EXP: {exposure.toFixed(1)}x
+        </button>
+
+        {/* View Mode Toggle */}
+        <button
+          onClick={handleRotateViewMode}
+          className="px-2 py-1 text-zinc-400 hover:text-white rounded hover:bg-[#1d2737] transition-colors font-mono font-bold text-[9px] uppercase tracking-wider"
+          title="Change View Mode"
+        >
+          MODE: {viewMode === "shaded-wireframe" ? "EDGES" : viewMode.toUpperCase()}
         </button>
 
         <div className="w-[1px] h-3.5 bg-zinc-800 mx-1" />

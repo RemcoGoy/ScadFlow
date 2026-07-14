@@ -97,7 +97,7 @@ draw_object();
         showCustomizer: true,
         showSidebar: true,
         openFiles: ["/main.scad"],
-        viewMode: "shaded",
+        viewMode: "shaded-wireframe",
         cameraType: "perspective",
         environment: "neutral",
         logFilter: "",
