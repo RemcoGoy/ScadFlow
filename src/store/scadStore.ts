@@ -77,7 +77,7 @@ shape = "cube"; // [cube, sphere, cylinder]
 
 module draw_object() {
     if (shape == "cube") {
-        cube([size, size, height], center = true);
+        cube([size, size, size], center = true);
     } else if (shape == "sphere") {
         sphere(r = size / 2, $fn = 50);
     } else if (shape == "cylinder") {
