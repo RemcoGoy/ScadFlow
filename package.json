@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint --config eslint.config.js \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint:fix": "eslint --config eslint.config.js \"src/**/*.{js,jsx,ts,tsx}\" --fix",
-    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,md}\""
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,md}\"",
+    "prepare": "husky"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.3",
@@ -44,6 +45,7 @@
     "eslint-plugin-prettier": "^5.2.3",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.1.0",
+    "husky": "^9.1.7",
     "prettier": "^3.5.2",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.25.0",

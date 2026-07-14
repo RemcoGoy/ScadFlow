@@ -24,8 +24,7 @@ export function Viewer() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [autoRotate, setAutoRotate] = useState(false);
-  const [shadowIntensity, setShadowIntensity] = useState(1);
-  const [exposure, setExposure] = useState(1.0);
+  const [exposure, setExposure] = useState(0.5);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -37,6 +36,12 @@ export function Viewer() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (modelViewerRef.current) {
+      modelViewerRef.current.autoRotate = autoRotate;
+    }
+  }, [autoRotate, modelUrl]);
 
   const handleResetCamera = () => {
     if (modelViewerRef.current) {
@@ -90,7 +95,7 @@ export function Viewer() {
         disable-tap
         camera-orbit="45deg 55deg 100m"
         auto-rotate={autoRotate ? true : undefined}
-        shadow-intensity={String(shadowIntensity)}
+        shadow-intensity="1"
         exposure={String(exposure)}
       />
 
@@ -140,32 +145,6 @@ export function Viewer() {
               strokeLinejoin="round"
               strokeWidth={2}
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-        </button>
-
-        {/* Shadows Toggle */}
-        <button
-          onClick={() => setShadowIntensity((prev) => (prev === 0 ? 1 : 0))}
-          className={`p-1 rounded transition-colors ${
-            shadowIntensity > 0
-              ? "text-scad-amber bg-scad-amber-bg border border-scad-amber/20"
-              : "text-zinc-400 hover:text-white hover:bg-[#1d2737]"
-          }`}
-          title="Toggle Shadows"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-3.5 w-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
             />
           </svg>
         </button>
