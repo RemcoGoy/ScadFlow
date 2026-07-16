@@ -4,85 +4,94 @@ import { exportGlb } from "@/lib/io/glb";
 import { readFileAsDataURL } from "@/lib/utils";
 import { useScadStore } from "@/store/scadStore";
 
-const getBfs = () => {
-  const windowObj = (typeof window === "object" ? window : self) as any;
-  return windowObj.BrowserFS ? windowObj.BrowserFS.BFSRequire("fs") : null;
-};
+import { opfs } from "@/lib/fs/opfs";
 
-// Sync files recursively from BrowserFS to Emscripten FS
-function syncBrowserFSToEmscripten(bfs: any, efs: any, currentPath: string = "/") {
+// Sync files recursively from OPFS to Emscripten FS
+async function syncOpfsToEmscripten(efs: any, currentPath: string = "/") {
   try {
     if (currentPath === "/tmp" || currentPath === "/locale") return;
 
-    const entries = bfs.readdirSync(currentPath);
-    for (const entry of entries) {
-      const fullPath = currentPath === "/" ? `/${entry}` : `${currentPath}/${entry}`;
-      const stat = bfs.lstatSync(fullPath);
+    const entries = await opfs.readdirTree(currentPath);
+    // Note: readdirTree returns the whole tree recursively if we use it,
+    // but in opfs.ts it actually returns {name, path, isDir, children} for the subtree.
+    // However, our opfs.readdirTree implementation actually does traverse the whole tree.
+    // Let's just iterate over the flat entries or traverse the tree.
 
-      if (stat.isDirectory()) {
-        try {
-          efs.mkdir(fullPath);
-        } catch {
-          // directory likely already exists
-        }
-        syncBrowserFSToEmscripten(bfs, efs, fullPath);
-      } else {
-        let writeNeeded = true;
-        try {
-          const efsStat = efs.stat(fullPath);
-          const bfsStat = bfs.statSync(fullPath);
-          if (efsStat.size === bfsStat.size) {
-            writeNeeded = false;
+    // Helper to traverse the tree nodes
+    const traverse = async (nodes: any[]) => {
+      for (const node of nodes) {
+        if (node.isDir) {
+          try {
+            efs.mkdir(node.path);
+          } catch {
+            // directory likely already exists
           }
-        } catch {
-          // file doesn't exist in Emscripten FS
-        }
+          if (node.children) {
+            await traverse(node.children);
+          }
+        } else {
+          let writeNeeded = true;
+          if (node.size !== undefined && node.lastModified !== undefined) {
+            try {
+              const efsStat = efs.stat(node.path);
+              // Simple check: if size matches, we assume it's the same.
+              // To be perfectly safe, we also check if mtime matches if we could,
+              // but Emscripten sets mtime to current time on write.
+              // For OpenSCAD scripts, size check is usually enough to prevent massive redundant copies.
+              // We could also store a custom map of OPFS path -> lastModified if we want to be stricter.
+              if (efsStat.size === node.size) {
+                writeNeeded = false;
+              }
+            } catch {
+              // file doesn't exist in Emscripten FS
+            }
+          }
 
-        if (writeNeeded) {
-          const content = bfs.readFileSync(fullPath);
-          efs.writeFile(fullPath, new Uint8Array(content));
+          if (writeNeeded) {
+            const buffer = await opfs.readFileBuffer(node.path);
+            efs.writeFile(node.path, new Uint8Array(buffer));
+          }
         }
       }
-    }
+    };
+
+    await traverse(entries);
   } catch (err) {
-    console.error(`Error synchronizing ${currentPath} from BrowserFS to Emscripten FS:`, err);
+    console.error(`Error synchronizing ${currentPath} from OPFS to Emscripten FS:`, err);
   }
 }
 
+let globalScadInstance: any = null;
+
 async function getScadInstance() {
-  const store = useScadStore.getState();
-  const instance = await OpenSCAD({
-    noInitialRun: true,
-    print: (text: string) => {
-      console.log("[OpenSCAD WASM stdout]:", text);
-      store.addLog(text, "info");
-    },
-    printErr: (text: string) => {
-      console.error("[OpenSCAD WASM stderr]:", text);
-      // OpenSCAD writes all logs, including stats, to stderr.
-      // We categorize as error only if the log line contains error/failure indicators.
-      const isError = /error|failed/i.test(text) && !/warning/i.test(text);
-      store.addLog(text, isError ? "error" : "info");
-    },
-  });
+  if (!globalScadInstance) {
+    globalScadInstance = await OpenSCAD({
+      noInitialRun: true,
+      noExitRuntime: true,
+      print: (text: string) => {
+        console.log("[OpenSCAD WASM stdout]:", text);
+        useScadStore.getState().addLog(text, "info");
+      },
+      printErr: (text: string) => {
+        console.error("[OpenSCAD WASM stderr]:", text);
+        const isError = /error|failed/i.test(text) && !/warning/i.test(text);
+        useScadStore.getState().addLog(text, isError ? "error" : "info");
+      },
+    });
 
-  instance.FS.chdir("/");
-  try {
-    instance.FS.mkdir("/locale");
-  } catch {
-    /* locale directory already exists or error */
+    globalScadInstance.FS.chdir("/");
+    try {
+      globalScadInstance.FS.mkdir("/locale");
+    } catch {
+      /* locale directory already exists or error */
+    }
   }
 
-  // Sync workspace files from BrowserFS to Emscripten FS
-  const bfs = getBfs();
-  if (bfs) {
-    console.log("Synchronizing BrowserFS files to Emscripten FS...");
-    syncBrowserFSToEmscripten(bfs, instance.FS, "/");
-  } else {
-    console.warn("BrowserFS is not initialized; using standard in-memory workspace.");
-  }
+  // Sync workspace files from OPFS to Emscripten FS
+  console.log("Synchronizing OPFS files to Emscripten FS...");
+  await syncOpfsToEmscripten(globalScadInstance.FS, "/");
 
-  return instance;
+  return globalScadInstance;
 }
 
 export async function generateModel(code: string, variables: any[] = []): Promise<string> {

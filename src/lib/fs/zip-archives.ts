@@ -1,6 +1,6 @@
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
-import { Symlinks } from "./filesystem";
+export type Symlinks = { [alias: string]: string };
 
 export type ZipArchives = {
   [name: string]: {

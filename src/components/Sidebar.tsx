@@ -1,15 +1,8 @@
 import { useState, useEffect } from "react";
 import { useScadStore, FileItem } from "@/store/scadStore";
-import {
-  isFileSystemAccessSupported,
-  syncDirectoryHandleToBrowserFS,
-} from "@/lib/fs/fileSystemAccess";
+import { isFileSystemAccessSupported, syncDirectoryHandleToOpfs } from "@/lib/fs/fileSystemAccess";
+import { opfs } from "@/lib/fs/opfs";
 import JSZip from "jszip";
-
-const getBfs = () => {
-  const windowObj = (typeof window === "object" ? window : self) as any;
-  return windowObj.BrowserFS ? windowObj.BrowserFS.BFSRequire("fs") : null;
-};
 
 export function Sidebar() {
   const { filesList, setFilesList, activeFilePath, openFile, closeFile, setScadCode } =
@@ -22,79 +15,74 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
-  const bfs = getBfs();
+  // Renaming state
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
-  const refreshFileTree = () => {
-    if (!bfs) return;
-    const tree = readBfsDirectoryTree(bfs, "/");
+  const [isDragging, setIsDragging] = useState(false);
+
+  const refreshFileTree = async () => {
+    const tree = await readOpfsDirectoryTree("/");
     setFilesList(tree);
   };
 
   useEffect(() => {
     refreshFileTree();
+
+    const handleUpdate = () => refreshFileTree();
+    window.addEventListener("fs-update", handleUpdate);
+    return () => window.removeEventListener("fs-update", handleUpdate);
   }, []);
 
-  const readBfsDirectoryTree = (fs: any, dirPath = "/"): FileItem[] => {
-    const items: FileItem[] = [];
+  const readOpfsDirectoryTree = async (dirPath = "/"): Promise<FileItem[]> => {
     try {
-      const entries = fs.readdirSync(dirPath);
-      for (const entry of entries) {
-        if (
-          entry === "tmp" ||
-          entry === "locale" ||
-          entry === "libraries" ||
-          entry === "lost+found" ||
-          entry.startsWith(".")
-        ) {
-          continue;
-        }
-        const fullPath = dirPath === "/" ? `/${entry}` : `${dirPath}/${entry}`;
-        const stat = fs.lstatSync(fullPath);
-        const isDir = stat.isDirectory();
-        items.push({
-          name: entry,
-          path: fullPath,
-          isDir,
-          children: isDir ? readBfsDirectoryTree(fs, fullPath) : undefined,
-        });
-      }
+      const items = await opfs.readdirTree(dirPath);
+      // Filter out internal directories
+      return filterInternalNodes(items);
     } catch (e) {
-      console.error("Error reading BFS directory tree:", e);
+      console.error("Error reading OPFS directory tree:", e);
+      return [];
     }
-    return items.sort((a, b) => {
-      if (a.isDir && !b.isDir) return -1;
-      if (!a.isDir && b.isDir) return 1;
-      return a.name.localeCompare(b.name);
+  };
+
+  const filterInternalNodes = (nodes: FileItem[]): FileItem[] => {
+    return nodes.filter((node) => {
+      const name = node.name;
+      if (
+        name === "tmp" ||
+        name === "locale" ||
+        name === "libraries" ||
+        name === "lost+found" ||
+        name.startsWith(".")
+      ) {
+        return false;
+      }
+      if (node.children) {
+        node.children = filterInternalNodes(node.children);
+      }
+      return true;
     });
   };
 
   const handleOpenLocalDirectory = async () => {
     if (!isFileSystemAccessSupported) {
       alert(
-        "File System Access API is not supported in this browser. Please map files individually or use Chrome/Edge for local folder mapping.",
+        "File System Access API is not supported in this browser. Please use Drag and Drop to upload files.",
       );
       return;
     }
     try {
       const handle = await (window as any).showDirectoryPicker();
-      if (bfs) {
-        await syncDirectoryHandleToBrowserFS(handle, bfs, "/");
-        refreshFileTree();
-        const rootFiles = bfs.readdirSync("/");
-        const scadFile = rootFiles.find((f: string) => f.endsWith(".scad"));
-        if (scadFile) {
-          handleOpenFile(`/${scadFile}`);
-        }
-      }
+      await syncDirectoryHandleToOpfs(handle, "/");
+      await refreshFileTree();
     } catch (err) {
       console.error("Error choosing directory:", err);
     }
   };
 
-  const handleOpenFile = (path: string) => {
-    if (!bfs) return;
+  const handleOpenFile = async (path: string) => {
     try {
-      const content = bfs.readFileSync(path, { encoding: "utf8" });
+      const content = await opfs.readFile(path);
       openFile(path);
       setScadCode(content);
     } catch (e) {
@@ -102,87 +90,104 @@ export function Sidebar() {
     }
   };
 
-  const handleCreateFile = () => {
-    if (!bfs || !newFileName) return;
+  const handleCreateFile = async () => {
+    if (!newFileName) return;
     const cleanName = newFileName.trim();
     const parent = selectedFolderForNewItem === "/" ? "" : selectedFolderForNewItem;
     const fullPath = `${parent}/${cleanName}`;
 
     try {
-      bfs.writeFileSync(fullPath, "");
+      await opfs.writeFile(fullPath, "");
       setNewFileName("");
       setIsCreatingFile(false);
-      refreshFileTree();
-      handleOpenFile(fullPath);
+      await refreshFileTree();
+      await handleOpenFile(fullPath);
     } catch (e: any) {
       alert(`Failed to create file: ${e.message}`);
     }
   };
 
-  const handleCreateFolder = () => {
-    if (!bfs || !newFileName) return;
+  const handleCreateFolder = async () => {
+    if (!newFileName) return;
     const cleanName = newFileName.trim();
     const parent = selectedFolderForNewItem === "/" ? "" : selectedFolderForNewItem;
     const fullPath = `${parent}/${cleanName}`;
 
     try {
-      bfs.mkdirSync(fullPath);
+      await opfs.mkdir(fullPath);
       setNewFileName("");
       setIsCreatingFolder(false);
-      refreshFileTree();
+      await refreshFileTree();
     } catch (e: any) {
       alert(`Failed to create folder: ${e.message}`);
     }
   };
 
-  const handleDeleteItem = (path: string, isDir: boolean, e: React.MouseEvent) => {
+  const handleDeleteItem = async (path: string, isDir: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!bfs) return;
     if (!confirm(`Are you sure you want to delete ${path}?`)) return;
 
     try {
       if (isDir) {
-        bfs.rmdirSync(path);
+        await opfs.rmdir(path);
       } else {
-        bfs.unlinkSync(path);
+        await opfs.unlink(path);
         closeFile(path);
       }
-      refreshFileTree();
+      await refreshFileTree();
     } catch (err: any) {
       alert(`Failed to delete item: ${err.message}`);
     }
   };
 
-  const addZipFolder = async (fs: any, currentPath: string, zipFolder: JSZip) => {
-    const entries = fs.readdirSync(currentPath);
-    for (const entry of entries) {
-      if (
-        entry === "tmp" ||
-        entry === "locale" ||
-        entry === "libraries" ||
-        entry === "lost+found" ||
-        entry.startsWith(".")
-      ) {
-        continue;
+  const handleRenameSubmit = async (oldPath: string) => {
+    if (!renameValue.trim()) {
+      setRenamingPath(null);
+      return;
+    }
+
+    const parentDir = oldPath.split("/").slice(0, -1).join("/");
+    const newPath = `${parentDir}/${renameValue.trim()}`;
+
+    if (newPath === oldPath) {
+      setRenamingPath(null);
+      return;
+    }
+
+    try {
+      await opfs.rename(oldPath, newPath);
+      setRenamingPath(null);
+
+      // Update open files state if renaming an open file
+      if (activeFilePath === oldPath) {
+        closeFile(oldPath);
+        openFile(newPath);
       }
-      const fullPath = currentPath === "/" ? `/${entry}` : `${currentPath}/${entry}`;
-      const stat = fs.lstatSync(fullPath);
-      if (stat.isDirectory()) {
-        const nextZipFolder = zipFolder.folder(entry);
+
+      await refreshFileTree();
+    } catch (err: any) {
+      alert(`Rename failed: ${err.message}`);
+    }
+  };
+
+  const addZipFolder = async (nodes: FileItem[], zipFolder: JSZip) => {
+    for (const node of nodes) {
+      if (node.isDir && node.children) {
+        const nextZipFolder = zipFolder.folder(node.name);
         if (nextZipFolder) {
-          await addZipFolder(fs, fullPath, nextZipFolder);
+          await addZipFolder(node.children, nextZipFolder);
         }
       } else {
-        const content = fs.readFileSync(fullPath);
-        zipFolder.file(entry, content);
+        const content = await opfs.readFileBuffer(node.path);
+        zipFolder.file(node.name, content);
       }
     }
   };
 
   const handleExportZip = async () => {
-    if (!bfs) return;
     const zip = new JSZip();
-    await addZipFolder(bfs, "/", zip);
+    const tree = await readOpfsDirectoryTree("/");
+    await addZipFolder(tree, zip);
 
     const blob = await zip.generateAsync({ type: "blob" });
     const url = URL.createObjectURL(blob);
@@ -201,6 +206,43 @@ export function Sidebar() {
       ...prev,
       [path]: !prev[path],
     }));
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    if (e.dataTransfer.items) {
+      const promises = [];
+      for (let i = 0; i < e.dataTransfer.items.length; i++) {
+        const item = e.dataTransfer.items[i];
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) {
+            promises.push(
+              (async () => {
+                const buffer = await file.arrayBuffer();
+                const fullPath = `/${file.name}`;
+                await opfs.writeFile(fullPath, buffer);
+              })(),
+            );
+          }
+        }
+      }
+      await Promise.all(promises);
+      await refreshFileTree();
+    }
   };
 
   // Filter items based on search query
@@ -226,6 +268,7 @@ export function Sidebar() {
     return nodes.map((node) => {
       const isCollapsed = collapsedFolders[node.path] ?? false;
       const isActive = activeFilePath === node.path;
+      const isRenaming = renamingPath === node.path;
 
       return (
         <div key={node.path} className="pl-1 select-none">
@@ -236,6 +279,7 @@ export function Sidebar() {
                 : "text-zinc-400 hover:text-zinc-250 hover:bg-[#131924]/20"
             }`}
             onClick={(e) => {
+              if (isRenaming) return;
               if (node.isDir) {
                 toggleFolderCollapse(node.path, e);
               } else {
@@ -244,38 +288,87 @@ export function Sidebar() {
             }}
           >
             <div className="flex items-center space-x-2 truncate flex-1 text-[11px] font-mono">
-              {/* Amber Dot indicator matching the ScadForge file row style */}
               <span className="text-scad-amber text-[10px] leading-none select-none">●</span>
-              <span className="truncate">{node.name}</span>
+
+              {isRenaming ? (
+                <input
+                  type="text"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => handleRenameSubmit(node.path)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRenameSubmit(node.path);
+                    if (e.key === "Escape") setRenamingPath(null);
+                  }}
+                  autoFocus
+                  className="bg-[#0b0e14] text-zinc-100 border border-scad-amber rounded px-1 py-0.5 outline-none flex-1 min-w-0"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span className="truncate">{node.name}</span>
+              )}
             </div>
 
-            {/* Flat delete action button */}
-            <div className="flex items-center space-x-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
-              <button
-                onClick={(e) => handleDeleteItem(node.path, node.isDir, e)}
-                className={`p-0.5 rounded transition-colors ${
-                  isActive
-                    ? "text-scad-amber/80 hover:text-scad-amber hover:bg-white/5"
-                    : "text-zinc-650 hover:text-red-400 hover:bg-[#1a2232]"
-                }`}
-                title="Delete"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-3 w-3"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+            {/* Actions */}
+            {!isRenaming && (
+              <div className="flex items-center space-x-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                {/* Rename Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenameValue(node.name);
+                    setRenamingPath(node.path);
+                  }}
+                  className={`p-0.5 rounded transition-colors ${
+                    isActive
+                      ? "text-scad-amber/80 hover:text-scad-amber hover:bg-white/5"
+                      : "text-zinc-500 hover:text-zinc-300 hover:bg-[#1a2232]"
+                  }`}
+                  title="Rename"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            </div>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </button>
+
+                {/* Delete Button */}
+                <button
+                  onClick={(e) => handleDeleteItem(node.path, node.isDir, e)}
+                  className={`p-0.5 rounded transition-colors ${
+                    isActive
+                      ? "text-scad-amber/80 hover:text-scad-amber hover:bg-white/5"
+                      : "text-zinc-650 hover:text-red-400 hover:bg-[#1a2232]"
+                  }`}
+                  title="Delete"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
           {node.isDir && !isCollapsed && node.children && node.children.length > 0 && (
             <div className="border-l border-zinc-800 ml-1.5 mt-0.5 pl-0.5">
@@ -290,7 +383,12 @@ export function Sidebar() {
   const filteredTree = filterTree(filesList, searchQuery);
 
   return (
-    <div className="flex flex-col h-full bg-panel-bg w-full text-zinc-350">
+    <div
+      className={`flex flex-col h-full bg-panel-bg w-full text-zinc-350 transition-colors ${isDragging ? "bg-[#1d2737] ring-inset ring-2 ring-scad-amber/50" : ""}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* File Action Buttons Panel matching the design mock */}
       <div className="p-3 border-b border-border-figma flex space-x-2">
         <button
@@ -301,13 +399,23 @@ export function Sidebar() {
           }}
           className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
         >
-          + New
+          + File
+        </button>
+        <button
+          onClick={() => {
+            setSelectedFolderForNewItem("/");
+            setIsCreatingFolder(true);
+            setIsCreatingFile(false);
+          }}
+          className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
+        >
+          + Folder
         </button>
         <button
           onClick={handleOpenLocalDirectory}
           className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
         >
-          ↑ Upload
+          ↑ Sync Dir
         </button>
       </div>
 
@@ -361,14 +469,38 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* Drag overlay indicator */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none border-2 border-scad-amber border-dashed">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-scad-amber mb-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            <p className="text-sm font-semibold text-white">Drop files to upload</p>
+          </div>
+        </div>
+      )}
+
       {/* Sources Flat Section List */}
-      <div className="p-3 select-none">
+      <div className="p-3 select-none flex-1 overflow-y-auto">
         <h3 className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase font-sans mb-2">
           SOURCES
         </h3>
         <div className="space-y-0.5">
           {filteredTree.length === 0 ? (
-            <div className="text-zinc-650 italic text-[10px] pl-3 py-1">No files available</div>
+            <div className="text-zinc-650 italic text-[10px] pl-3 py-1">
+              No files available. Drag & drop files here.
+            </div>
           ) : (
             renderTreeNodes(filteredTree)
           )}

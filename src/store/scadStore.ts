@@ -13,6 +13,8 @@ export interface FileItem {
   path: string;
   isDir: boolean;
   children?: FileItem[];
+  size?: number;
+  lastModified?: number;
 }
 
 export interface ParamVariable {

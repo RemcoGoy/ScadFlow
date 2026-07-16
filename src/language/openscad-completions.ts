@@ -1,7 +1,8 @@
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
-import { join, Symlinks } from "@/lib/fs/filesystem";
+import { join } from "@/lib/utils";
+import { Symlinks } from "@/lib/fs/zip-archives";
 import {
   ParsedFile,
   ParsedFunctionoidDef,

@@ -1,27 +1,27 @@
+import { opfs } from "./opfs";
+
 export const isFileSystemAccessSupported =
   typeof window !== "undefined" && "showDirectoryPicker" in window;
 
-export async function syncDirectoryHandleToBrowserFS(
+export async function syncDirectoryHandleToOpfs(
   dirHandle: FileSystemDirectoryHandle,
-  bfs: any,
   targetPath = "/",
 ): Promise<void> {
-  const BrowserFSBuffer = (window as any).BrowserFS.BFSRequire("buffer").Buffer;
-
-  for await (const entry of (dirHandle as any).values()) {
+  // @ts-expect-error - dirHandle.values() is valid in modern browsers but missing in types
+  for await (const entry of dirHandle.values()) {
     const entryPath = targetPath === "/" ? `/${entry.name}` : `${targetPath}/${entry.name}`;
 
     if (entry.kind === "directory") {
       try {
-        bfs.mkdirSync(entryPath);
+        await opfs.mkdir(entryPath);
       } catch {
         // Directory already exists or error
       }
-      await syncDirectoryHandleToBrowserFS(entry, bfs, entryPath);
+      await syncDirectoryHandleToOpfs(entry as FileSystemDirectoryHandle, entryPath);
     } else {
       const file = await (entry as FileSystemFileHandle).getFile();
       const arrayBuffer = await file.arrayBuffer();
-      bfs.writeFileSync(entryPath, BrowserFSBuffer.from(arrayBuffer));
+      await opfs.writeFile(entryPath, arrayBuffer);
     }
   }
 }

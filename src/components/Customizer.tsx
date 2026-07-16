@@ -123,7 +123,7 @@ export function Customizer({
     }));
   };
 
-  const handleValueChange = (name: string, value: any) => {
+  const handleValueChange = (name: string, value: any, commit: boolean = true) => {
     const updated = variables.map((v) => {
       if (v.name === name) {
         return { ...v, value };
@@ -131,7 +131,13 @@ export function Customizer({
       return v;
     });
     setVariables(updated);
-    onParametersChange(updated);
+    if (commit) {
+      onParametersChange(updated);
+    }
+  };
+
+  const handleCommit = () => {
+    onParametersChange(useScadStore.getState().variables);
   };
 
   return (
@@ -203,7 +209,20 @@ export function Customizer({
                                 max={v.max}
                                 step={v.step}
                                 value={v.value}
-                                onChange={(e) => handleValueChange(v.name, Number(e.target.value))}
+                                onChange={(e) =>
+                                  handleValueChange(v.name, Number(e.target.value), false)
+                                }
+                                onMouseUp={handleCommit}
+                                onTouchEnd={handleCommit}
+                                onKeyUp={(e) => {
+                                  if (
+                                    ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
+                                      e.key,
+                                    )
+                                  ) {
+                                    handleCommit();
+                                  }
+                                }}
                                 className="figma-slider flex-1"
                               />
                               <input
@@ -211,7 +230,13 @@ export function Customizer({
                                 value={String(v.value)}
                                 onChange={(e) => {
                                   const num = Number(e.target.value);
-                                  if (!isNaN(num)) handleValueChange(v.name, num);
+                                  if (!isNaN(num)) handleValueChange(v.name, num, false);
+                                }}
+                                onBlur={handleCommit}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    handleCommit();
+                                  }
                                 }}
                                 className="w-11 bg-[#0b0e14] border border-border-figma text-zinc-300 font-mono text-[10px] rounded px-1 py-0.5 text-center focus:outline-none focus:border-scad-amber"
                               />

@@ -1,13 +1,9 @@
 import { useScadStore } from "@/store/scadStore";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import openscadEditorOptions from "@/language/openscad-editor-options";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import Editor, { loader, Monaco } from "@monaco-editor/react";
-
-const getBfs = () => {
-  const windowObj = (typeof window === "object" ? window : self) as any;
-  return windowObj.BrowserFS ? windowObj.BrowserFS.BFSRequire("fs") : null;
-};
+import { opfs } from "@/lib/fs/opfs";
 
 const isMonacoSupported = (() => {
   const ua = window.navigator.userAgent;
@@ -28,24 +24,38 @@ export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
   const { scadCode, setScadCode, activeFilePath, openFiles, autoRender } = useScadStore();
   const [editor, setEditor] = useState(null as monaco.editor.IStandaloneCodeEditor | null);
 
-  const bfs = getBfs();
-
-  // Read file from BFS when active file changes
+  // Read file from OPFS when active file changes
   useEffect(() => {
-    if (!bfs || !activeFilePath) return;
-    try {
-      const content = bfs.readFileSync(activeFilePath, { encoding: "utf8" });
-      setScadCode(content);
-    } catch (e) {
-      console.error("Error reading file in editor mount:", e);
-    }
-  }, [activeFilePath, bfs]);
+    if (!activeFilePath) return;
+    const fetchFile = async () => {
+      try {
+        const fileExists = await opfs.exists(activeFilePath);
+        if (!fileExists) {
+          // File doesn't exist yet (e.g. first load), write the default code to it
+          const currentCode = useScadStore.getState().scadCode;
+          await opfs.writeFile(activeFilePath, currentCode);
+          window.dispatchEvent(new Event("fs-update"));
+        } else {
+          const content = await opfs.readFile(activeFilePath);
+          setScadCode(content);
+        }
+      } catch (e) {
+        console.error("Error reading file in editor mount:", e);
+      }
+    };
+    fetchFile();
+  }, [activeFilePath, setScadCode]);
+
+  const compileTriggerRef = useRef(onCompileTrigger);
+  useEffect(() => {
+    compileTriggerRef.current = onCompileTrigger;
+  }, [onCompileTrigger]);
 
   // Debounced auto-compilation (1000ms delay after typing)
   useEffect(() => {
     if (!scadCode || !autoRender) return;
     const timer = setTimeout(() => {
-      onCompileTrigger();
+      compileTriggerRef.current();
     }, 1000);
     return () => clearTimeout(timer);
   }, [scadCode, autoRender]);
@@ -104,13 +114,12 @@ export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
       id: "openscad-save",
       label: "Save OpenSCAD",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-      run: (ed) => {
+      run: async (ed) => {
         const val = ed.getValue();
-        const bfs = getBfs();
-        if (bfs && activeFilePath) {
+        if (activeFilePath) {
           try {
-            bfs.writeFileSync(activeFilePath, val);
-            console.log(`Saved file to BrowserFS: ${activeFilePath}`);
+            await opfs.writeFile(activeFilePath, val);
+            console.log(`Saved file to OPFS: ${activeFilePath}`);
           } catch (e) {
             console.error(`Failed to save file ${activeFilePath}:`, e);
           }

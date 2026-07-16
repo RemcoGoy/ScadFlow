@@ -60,3 +60,9 @@ export const listFilesystem = (scadInstance: any, directory = "/") => {
     console.error(`Error listing filesystem at ${directory}:`, error);
   }
 };
+
+export function join(a: string, b: string): string {
+  if (a === ".") return b;
+  if (a.endsWith("/")) return join(a.substring(0, a.length - 1), b);
+  return b === "." ? a : `${a}/${b}`;
+}
