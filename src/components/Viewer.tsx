@@ -120,8 +120,20 @@ export function Viewer() {
 
   const handleResetCamera = () => {
     if (modelViewerRef.current) {
-      modelViewerRef.current.cameraOrbit = "45deg 55deg 100m";
-      modelViewerRef.current.cameraTarget = "0m 0m 0m";
+      // Temporarily set the camera orbit to its current position to force the internal
+      // property setter to register a change when we immediately set it back to "auto"
+      const currentOrbit = modelViewerRef.current.getCameraOrbit();
+      modelViewerRef.current.cameraOrbit = `${currentOrbit.theta}rad ${currentOrbit.phi}rad ${currentOrbit.radius}m`;
+
+      // Set target to auto immediately
+      modelViewerRef.current.cameraTarget = "auto auto auto";
+
+      // Use requestAnimationFrame so the DOM catches the first change before we apply the goal
+      requestAnimationFrame(() => {
+        if (modelViewerRef.current) {
+          modelViewerRef.current.cameraOrbit = "45deg 55deg auto";
+        }
+      });
     }
   };
 
@@ -165,16 +177,15 @@ export function Viewer() {
         drag · rotate · scroll · zoom
       </div>
 
-      {/* Model Viewer Native Element */}
       <model-viewer
         ref={modelViewerRef}
         style={{ width: "100%", height: "100%" }}
         src={modelUrl}
         alt="A 3D model of an object"
         camera-controls
-        camera-target="0m 0m 0m"
+        camera-target="auto auto auto"
         disable-tap
-        camera-orbit="45deg 55deg 100m"
+        camera-orbit="45deg 55deg auto"
         auto-rotate={autoRotate ? true : undefined}
         shadow-intensity="1"
         exposure={String(exposure)}
