@@ -162,16 +162,12 @@ export function Customizer({
                 {/* Flat accordion group header */}
                 <button
                   onClick={() => toggleGroup(groupName)}
-                  className="w-full flex items-center justify-between px-3.5 py-1.5 hover:bg-[#1e293b]/20 transition-colors text-[10px] font-bold text-zinc-500 select-none uppercase tracking-wider"
+                  className="w-full flex items-center justify-start px-3.5 py-2 mb-1 hover:bg-[#1e293b]/30 bg-[#131924]/40 border-y border-border-figma/40 transition-colors text-[11px] font-medium text-zinc-300 select-none tracking-wide"
                 >
-                  <div className="flex items-center space-x-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-scad-amber shadow-sm shadow-scad-amber/30" />
-                    <span>{groupName}</span>
-                  </div>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className={`h-3 w-3 transform text-zinc-500 transition-transform duration-150 ${
-                      isExpanded ? "rotate-180" : ""
+                    className={`h-3 w-3 mr-2 transform text-zinc-500 transition-transform duration-150 ${
+                      isExpanded ? "rotate-90" : ""
                     }`}
                     fill="none"
                     viewBox="0 0 24 24"
@@ -181,9 +177,10 @@ export function Customizer({
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2.5}
-                      d="M19 9l-7 7-7-7"
+                      d="M9 5l7 7-7 7"
                     />
                   </svg>
+                  <span>{groupName}</span>
                 </button>
 
                 {/* Properties fields */}
