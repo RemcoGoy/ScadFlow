@@ -76,7 +76,7 @@ export function Customizer({
 }: {
   onParametersChange: (vars: ParamVariable[]) => void;
 }) {
-  const { scadCode, variables, setVariables } = useScadStore();
+  const { scadCode, variables, setVariables, setScadCode } = useScadStore();
   const initialParseDone = useRef(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
@@ -103,6 +103,8 @@ export function Customizer({
     }
     groups[groupName].push(v);
   }
+  const groupNames = Object.keys(groups);
+  const hasSingleParametersGroup = groupNames.length === 1 && groupNames[0] === "Parameters";
 
   useEffect(() => {
     setExpandedGroups((prev) => {
@@ -131,13 +133,63 @@ export function Customizer({
       return v;
     });
     setVariables(updated);
+
     if (commit) {
+      const currentCode = useScadStore.getState().scadCode;
+      const lines = currentCode.split("\n");
+      let updatedCode = false;
+      const newLines = lines.map((line) => {
+        const match = line.match(
+          /^(\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*=\s*)([^;]+)(\s*;\s*\/\/\s*\[[^\]]+\])(.*)$/i,
+        );
+        if (match && match[2] === name) {
+          let valStr = String(value);
+          if (typeof value === "string") {
+            valStr = `"${value}"`;
+          }
+          updatedCode = true;
+          return `${match[1]}${match[2]}${match[3]}${valStr}${match[5]}${match[6]}`;
+        }
+        return line;
+      });
+
+      if (updatedCode) {
+        setScadCode(newLines.join("\n"));
+      }
       onParametersChange(updated);
     }
   };
 
   const handleCommit = () => {
-    onParametersChange(useScadStore.getState().variables);
+    const currentCode = useScadStore.getState().scadCode;
+    const currentVars = useScadStore.getState().variables;
+    const lines = currentCode.split("\n");
+    let updatedCode = false;
+    const newLines = lines.map((line) => {
+      const match = line.match(
+        /^(\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*=\s*)([^;]+)(\s*;\s*\/\/\s*\[[^\]]+\])(.*)$/i,
+      );
+      if (match) {
+        const varName = match[2];
+        const v = currentVars.find((cv) => cv.name === varName);
+        if (v) {
+          let valStr = String(v.value);
+          if (typeof v.value === "string") {
+            valStr = `"${v.value}"`;
+          }
+          if (match[4].trim() !== valStr) {
+            updatedCode = true;
+            return `${match[1]}${match[2]}${match[3]}${valStr}${match[5]}${match[6]}`;
+          }
+        }
+      }
+      return line;
+    });
+
+    if (updatedCode) {
+      setScadCode(newLines.join("\n"));
+    }
+    onParametersChange(currentVars);
   };
 
   return (
@@ -156,36 +208,39 @@ export function Customizer({
         ) : (
           Object.entries(groups).map(([groupName, groupVars]) => {
             const isExpanded = expandedGroups[groupName] ?? true;
+            const showHeader = !hasSingleParametersGroup;
 
             return (
               <div key={groupName} className="bg-panel-bg">
                 {/* Flat accordion group header */}
-                <button
-                  onClick={() => toggleGroup(groupName)}
-                  className="w-full flex items-center justify-start px-3.5 py-2 mb-1 hover:bg-[#1e293b]/30 bg-[#131924]/40 border-y border-border-figma/40 transition-colors text-[11px] font-medium text-zinc-300 select-none tracking-wide"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className={`h-3 w-3 mr-2 transform text-zinc-500 transition-transform duration-150 ${
-                      isExpanded ? "rotate-90" : ""
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                {showHeader && (
+                  <button
+                    onClick={() => toggleGroup(groupName)}
+                    className="w-full flex items-center justify-start px-3.5 py-2 mb-1 hover:bg-[#1e293b]/30 bg-[#131924]/40 border-y border-border-figma/40 transition-colors text-[11px] font-medium text-zinc-300 select-none tracking-wide"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2.5}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                  <span>{groupName}</span>
-                </button>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className={`h-3 w-3 mr-2 transform text-zinc-500 transition-transform duration-150 ${
+                        isExpanded ? "rotate-90" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                    <span>{groupName}</span>
+                  </button>
+                )}
 
                 {/* Properties fields */}
-                {isExpanded && (
-                  <div className="px-3.5 pb-3.5 pt-1 space-y-3">
+                {(!showHeader || isExpanded) && (
+                  <div className={`px-3.5 pb-3.5 ${showHeader ? "pt-1" : "pt-3.5"} space-y-3`}>
                     {groupVars.map((v) => (
                       <div key={v.name} className="flex items-center space-x-2">
                         {/* Label */}

@@ -265,7 +265,7 @@ function App() {
                       <div className="flex-shrink-0 flex items-center h-8 px-4 bg-header-bg border-b border-border-figma select-none">
                         <span className="text-scad-amber mr-1.5 text-[10px] leading-none">●</span>
                         <span className="text-[11px] text-zinc-400 font-medium font-sans tracking-wide lowercase">
-                          flow-builder
+                          console
                         </span>
                       </div>
                       <div className="flex-1 min-h-0">
