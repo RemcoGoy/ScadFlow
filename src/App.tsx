@@ -1,4 +1,5 @@
 import "./App.css";
+import { Boxes } from "lucide-react";
 import { Sidebar } from "@/components/Sidebar.tsx";
 import { ScadEditor } from "@/components/ScadEditor.tsx";
 import { Viewer } from "@/components/Viewer.tsx";
@@ -65,13 +66,8 @@ function App() {
       {/* ScadForge Top Navigation Header */}
       <header className="flex-shrink-0 flex items-center justify-between px-4 h-12 bg-header-bg border-b border-border-figma select-none z-50">
         <div className="flex items-center space-x-2.5">
-          {/* Hexagon Amber Icon with SF */}
-          <div className="relative h-6 w-6 text-scad-amber flex items-center justify-center flex-shrink-0">
-            <svg viewBox="0 0 100 100" className="h-full w-full fill-current">
-              <polygon points="50,5 95,25 95,75 50,95 5,75 5,25" />
-            </svg>
-            <div className="absolute text-[#0b0e14] font-black text-[9px] font-sans">SF</div>
-          </div>
+          {/* Logo Icon */}
+          <Boxes className="h-5 w-5 text-scad-amber flex-shrink-0" />
           <div className="flex items-baseline space-x-2.5">
             <h1 className="text-sm font-bold tracking-wide text-zinc-100 font-display">
               ScadForge
