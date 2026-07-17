@@ -1,28 +1,99 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import * as THREE from "three";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, Environment, useGLTF, Bounds, Center, useBounds } from "@react-three/drei";
 import { useScadStore } from "../store/scadStore";
 
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace JSX {
-    interface IntrinsicElements {
-      "model-viewer": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-        src: string;
-        alt: string;
-        "auto-rotate"?: boolean;
-        "shadow-intensity"?: string;
-        exposure?: string;
-      };
+function Model({
+  url,
+  viewMode,
+  onLoaded,
+}: {
+  url: string;
+  viewMode: string;
+  onLoaded?: () => void;
+}) {
+  const { scene } = useGLTF(url);
+
+  const clonedScene = useMemo(() => {
+    if (!scene) return null;
+
+    // Clone the scene to avoid mutating useGLTF's cached instance
+    const cloned = scene.clone();
+
+    cloned.traverse((child: any) => {
+      if (child.isMesh && child.geometry) {
+        // Clone material so we don't mutate a potentially shared material
+        if (child.material) {
+          child.material = child.material.clone();
+        }
+
+        if (viewMode === "shaded") {
+          if (child.material) {
+            child.material.wireframe = false;
+            child.material.visible = true;
+          }
+        } else if (viewMode === "wireframe") {
+          if (child.material) {
+            child.material.wireframe = true;
+            child.material.visible = true;
+          }
+        } else if (viewMode === "shaded-wireframe") {
+          if (child.material) {
+            child.material.wireframe = false;
+            child.material.visible = true;
+          }
+
+          const geometry = child.geometry;
+          // Ensure geometry has position attributes before creating edges
+          // This prevents "x2 is undefined" or similar errors from internal ThreeJS
+          if (geometry && geometry.attributes && geometry.attributes.position) {
+            try {
+              const edgesGeo = new THREE.EdgesGeometry(geometry, 20);
+              const lineMat = new THREE.LineBasicMaterial({
+                color: 0x111111,
+              });
+              const lineSegments = new THREE.LineSegments(edgesGeo, lineMat);
+              lineSegments.userData = { isScadEdges: true };
+              child.add(lineSegments);
+            } catch (err) {
+              console.warn("Could not create EdgesGeometry for mesh", err);
+            }
+          }
+        }
+      }
+    });
+
+    return cloned;
+  }, [scene, viewMode]);
+
+  useEffect(() => {
+    if (scene && onLoaded) {
+      // Use a slight timeout to ensure the scene has been added to the parent
+      // and layout has occurred, so bounds calculation is accurate.
+      const timer = setTimeout(() => {
+        onLoaded();
+      }, 50);
+      return () => clearTimeout(timer);
     }
-  }
+  }, [scene, onLoaded]);
+
+  return clonedScene ? <primitive object={clonedScene} /> : null;
 }
 
-import "@google/model-viewer";
+function BoundsFit({ boundsApiRef }: { boundsApiRef: React.MutableRefObject<any> }) {
+  const api = useBounds();
+  useEffect(() => {
+    boundsApiRef.current = api;
+  }, [api, boundsApiRef]);
+  return null;
+}
 
 export function Viewer() {
   const { modelUrl, viewMode, setViewMode } = useScadStore();
-  const modelViewerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<any>(null);
+  const boundsApiRef = useRef<any>(null);
 
   const [autoRotate, setAutoRotate] = useState(false);
   const [exposure, setExposure] = useState(0.5);
@@ -38,104 +109,30 @@ export function Viewer() {
     };
   }, []);
 
-  useEffect(() => {
-    if (modelViewerRef.current) {
-      modelViewerRef.current.autoRotate = autoRotate;
-    }
-  }, [autoRotate, modelUrl]);
+  const handleResetCamera = useCallback(() => {
+    if (controlsRef.current && boundsApiRef.current) {
+      boundsApiRef.current.refresh();
+      const { center, distance } = boundsApiRef.current.getSize();
 
-  useEffect(() => {
-    const modelViewer = modelViewerRef.current;
-    if (!modelViewer) return;
-
-    const applyViewMode = () => {
-      const sceneSymbol = Object.getOwnPropertySymbols(modelViewer).find(
-        (s) => s.description === "scene",
+      // Create a spherical coordinate matching our desired angles
+      // Multiply distance by 1.6 to zoom out a bit more
+      const spherical = new THREE.Spherical(
+        distance * 1.6,
+        55 * (Math.PI / 180), // polar angle
+        Math.PI / 4, // azimuthal angle
       );
-      if (!sceneSymbol) return;
-      const scene = modelViewer[sceneSymbol];
-      if (!scene) return;
 
-      scene.traverse((child: any) => {
-        if (child.isMesh) {
-          // Remove existing custom edge lines
-          const existingEdges = child.children.filter(
-            (c: any) => c.userData && c.userData.isScadEdges,
-          );
-          existingEdges.forEach((edgesObj: any) => {
-            child.remove(edgesObj);
-            if (edgesObj.geometry) edgesObj.geometry.dispose();
-            if (edgesObj.material) edgesObj.material.dispose();
-          });
+      // Convert to Cartesian and set position
+      const offset = new THREE.Vector3().setFromSpherical(spherical);
 
-          if (viewMode === "shaded") {
-            if (child.material) {
-              child.material.wireframe = false;
-              child.material.visible = true;
-              child.material.needsUpdate = true;
-            }
-          } else if (viewMode === "wireframe") {
-            if (child.material) {
-              child.material.wireframe = true;
-              child.material.visible = true;
-              child.material.needsUpdate = true;
-            }
-          } else if (viewMode === "shaded-wireframe") {
-            if (child.material) {
-              child.material.wireframe = false;
-              child.material.visible = true;
-              child.material.needsUpdate = true;
-            }
+      controlsRef.current.object.position.copy(center).add(offset);
+      controlsRef.current.target.copy(center);
+      controlsRef.current.update();
 
-            const geometry = child.geometry;
-            if (geometry) {
-              const edgesGeo = new THREE.EdgesGeometry(geometry, 20);
-              const lineMat = new THREE.LineBasicMaterial({
-                color: 0x111111,
-              });
-              const lineSegments = new THREE.LineSegments(edgesGeo, lineMat);
-              lineSegments.userData = { isScadEdges: true };
-              child.add(lineSegments);
-            }
-          }
-        }
-      });
-
-      if (typeof scene.queueRender === "function") {
-        scene.queueRender();
-      }
-    };
-
-    const handleLoad = () => {
-      applyViewMode();
-    };
-
-    modelViewer.addEventListener("load", handleLoad);
-    applyViewMode();
-
-    return () => {
-      modelViewer.removeEventListener("load", handleLoad);
-    };
-  }, [modelUrl, viewMode]);
-
-  const handleResetCamera = () => {
-    if (modelViewerRef.current) {
-      // Temporarily set the camera orbit to its current position to force the internal
-      // property setter to register a change when we immediately set it back to "auto"
-      const currentOrbit = modelViewerRef.current.getCameraOrbit();
-      modelViewerRef.current.cameraOrbit = `${currentOrbit.theta}rad ${currentOrbit.phi}rad ${currentOrbit.radius}m`;
-
-      // Set target to auto immediately
-      modelViewerRef.current.cameraTarget = "auto auto auto";
-
-      // Use requestAnimationFrame so the DOM catches the first change before we apply the goal
-      requestAnimationFrame(() => {
-        if (modelViewerRef.current) {
-          modelViewerRef.current.cameraOrbit = "45deg 55deg auto";
-        }
-      });
+      // Update clipping planes
+      boundsApiRef.current.clip();
     }
-  };
+  }, []);
 
   const handleToggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -177,19 +174,34 @@ export function Viewer() {
         drag · rotate · scroll · zoom
       </div>
 
-      <model-viewer
-        ref={modelViewerRef}
-        style={{ width: "100%", height: "100%" }}
-        src={modelUrl}
-        alt="A 3D model of an object"
-        camera-controls
-        camera-target="auto auto auto"
-        disable-tap
-        camera-orbit="45deg 55deg auto"
-        auto-rotate={autoRotate ? true : undefined}
-        shadow-intensity="1"
-        exposure={String(exposure)}
-      />
+      <div className="w-full h-full z-10">
+        <Canvas
+          shadows
+          camera={{ position: [20, 20, 20], fov: 50 }}
+          gl={{ toneMappingExposure: exposure }}
+        >
+          <Suspense fallback={null}>
+            <Environment preset="city" />
+            <ambientLight intensity={0.5} />
+            <directionalLight position={[10, 10, 10]} intensity={1} castShadow />
+            {modelUrl && (
+              <Bounds clip observe>
+                <BoundsFit boundsApiRef={boundsApiRef} />
+                <Center>
+                  <Model url={modelUrl} viewMode={viewMode} onLoaded={handleResetCamera} />
+                </Center>
+              </Bounds>
+            )}
+            <OrbitControls
+              ref={controlsRef}
+              makeDefault
+              autoRotate={autoRotate}
+              minPolarAngle={0}
+              maxPolarAngle={Math.PI}
+            />
+          </Suspense>
+        </Canvas>
+      </div>
 
       {/* Minimal Floating Canvas Settings Toolbar (Bottom-Right) */}
       <div className="absolute bottom-3 right-3 flex items-center space-x-1.5 bg-[#131924]/85 border border-[#1e293b] p-1 rounded-lg shadow-xl z-20 transition-all select-none">
@@ -294,7 +306,7 @@ export function Viewer() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
+                d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l5-5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"
               />
             </svg>
           )}
