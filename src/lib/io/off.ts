@@ -10,12 +10,13 @@ export function parseOff(content: string): IndexedPolyhedron {
 
   let counts: string;
   let currentLine = 0;
-  if (lines[0].match(/^OFF(\s|$)/)) {
-    counts = lines[0].substring(3).trim();
-    currentLine = 1;
-  } else if (lines[currentLine] === "OFF" && lines.length > 1) {
+  if (lines[0] === "OFF") {
+    if (lines.length < 2) throw new Error("Invalid OFF file: missing counts line");
     counts = lines[1];
     currentLine = 2;
+  } else if (lines[0].startsWith("OFF")) {
+    counts = lines[0].substring(3).trim();
+    currentLine = 1;
   } else {
     throw new Error("Invalid OFF file: missing OFF header");
   }

@@ -30,8 +30,13 @@
     }
   },
   "include": [
-    "src",
-    "libs/openscad-wasm/openscad.d.ts",
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "libs",
+    "public/libraries"
   ],
   "references": [
     {

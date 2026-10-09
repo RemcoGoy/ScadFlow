@@ -1,6 +1,6 @@
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
-import { Symlinks } from "./filesystem";
+export type Symlinks = { [alias: string]: string };
 
 export type ZipArchives = {
   [name: string]: {
@@ -217,7 +217,9 @@ export const zipArchives: ZipArchives = {
         },
       ],
     },
-    symlinks: { "ub.scad": "libraries/ub.scad" }, // TODO change this after the replaces work
+    // The Makefile zips the repo as-is (replacePrefix above is not applied), so ub.scad
+    // stays under libraries/ in the archive
+    symlinks: { "ub.scad": "libraries/ub.scad" },
   },
   pathbuilder: {
     gitOrigin: {

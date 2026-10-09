@@ -2,41 +2,44 @@
 
 <div align="center">
 
-A modern, feature-rich (well, not yet) editor for OpenSCAD, built with [Tauri](https://tauri.app/), [React](https://reactjs.org/), and [TypeScript](https://www.typescriptlang.org/). Create, edit, and visualize 3D models, powered by WebAssembly.
-
-![OpenSCAD Web Editor Screenshot](screenshot.png)
+A modern, feature-rich editor for OpenSCAD, built with [React](https://reactjs.org/) and [TypeScript](https://www.typescriptlang.org/). Create, edit, and visualize 3D models, powered by WebAssembly.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Made with Tauri](https://img.shields.io/badge/Made%20with-Tauri-blue)](https://tauri.app/)
 [![OpenSCAD](https://img.shields.io/badge/Powered%20by-OpenSCAD-green)](https://openscad.org/)
 
 </div>
 
 ## ✨ Features
 
-- 🚀 Real-time OpenSCAD compilation and preview
-
-- 🌐 WebAssembly-powered OpenSCAD engine
-- 💻 Cross-platform support (Windows, macOS, Linux)
+- 🚀 **Real-time Compilation & Preview**: Your model re-renders automatically as you edit, shown in a three.js viewport.
+- 🌐 **WebAssembly Engine**: Runs the original OpenSCAD interpreter directly in your browser, no install needed.
+- 📝 **Monaco-based Editor**: Includes syntax highlighting, custom auto-completions, and snippets built specifically for OpenSCAD.
+- 🎛️ **Parameters Customizer**: Interactively modify your model parameters (like sizes, counts, shapes) with auto-generated sliders and dropdowns.
+- 📁 **Multi-file Workspace**: Organize files in folders with drag-and-drop and a right-click menu. Changes are saved automatically in the browser (OPFS), and you can export everything as a zip.
+- 🎯 **Main File**: Pick the file to render; it stays rendered while you edit the files it `include`s or `use`s.
+- 🔗 **Local Folder Sync**: Link a folder on disk (Chrome and Edge) to keep it in sync with the workspace in both directions, so you can work alongside your own editor or git. Other browsers can import a folder.
 
 ## 🗺️ Roadmap
 
-- [ ] Syntax highlighting
-- [ ] Auto-completion and code snippets
-- [ ] Integrated documentation viewer
-- [ ] File system integration
-- [ ] Export to various 3D formats
-- [ ] Parameter customization UI
-- [ ] Integrated debugging tools
-- [ ] Flow editor
+- [x] Syntax highlighting
+- [x] Auto-completion and code snippets
+- [x] Multi-file workspace with main file selection
+- [x] Two-way sync with a local folder
+- [x] Export to various 3D formats (OFF and GLB)
+- [x] Parameter customization UI
+- [ ] Viewport tools: section planes, measurements, animation
+- [ ] Sharing designs via URL
+- [ ] Mesh analysis and 3D printer integrations
+- [ ] Visual flow editor
+
+See [ROADMAP.md](ROADMAP.md) for details.
 
 ## 🛠️ Prerequisites
 
 Before you begin, ensure you have the following installed:
 
-- [Node.js](https://nodejs.org/) (v21 or newer)
+- [Node.js](https://nodejs.org/) (v22.13 or newer)
 - [pnpm](https://pnpm.io/installation) (v10 or newer)
-- [Rust](https://www.rust-lang.org/tools/install)
 - [Git](https://git-scm.com/downloads)
 
 ## 📦 Installation
@@ -60,13 +63,13 @@ pnpm install
 
 4. Start the development server:
 ```bash
-pnpm run tauri dev
+pnpm run dev
 ```
 
 ## 🏗️ Building for Production
 
 ```bash
-pnpm run tauri build
+pnpm run build
 ```
 
 ## 🤝 Contributing
