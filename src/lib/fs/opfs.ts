@@ -1,4 +1,4 @@
-import { FileItem } from "@/store/scadStore";
+import type { FileItem } from "@/store/scadStore";
 export const getParentDir = (path: string) => {
   const d = path.split("/").slice(0, -1).join("/");
   return d === "" ? (path.startsWith("/") ? "/" : ".") : d;
