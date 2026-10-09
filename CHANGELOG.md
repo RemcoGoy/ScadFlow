@@ -1,5 +1,15 @@
 # scadflow
 
+## 0.3.0
+
+### Minor Changes
+
+- 407e212: Run OpenSCAD in a Web Worker so the editor stays responsive while models compile. Long compiles are cancelled when a newer render is requested, and the viewport overlay has a Cancel button.
+
+### Patch Changes
+
+- 2882672: Update `include`/`use` paths in other files when a file or folder is moved or renamed, and stop renames from overwriting an existing file.
+
 ## 0.2.0
 
 ### Minor Changes
