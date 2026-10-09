@@ -1,184 +1,126 @@
-import OpenSCAD from "@/wasm/openscad.js";
-import { parseOff } from "@/lib/io/off";
-import { exportGlb } from "@/lib/io/glb";
-import { readFileAsDataURL } from "@/lib/utils";
-import { useScadStore, type FileItem } from "@/store/scadStore";
+import { useScadStore, type ParamVariable } from "@/store/scadStore";
+import type { CompileRequest, WorkerMessage } from "./scad.protocol";
 
-import { opfs } from "@/lib/fs/opfs";
+// Main-thread client for scad.worker.ts. Only the latest request matters: a request
+// waiting behind a running compile is replaced by newer ones, and a compile that has
+// been running for a while is aborted (by restarting the worker) instead of waited for.
 
-// Path -> OPFS lastModified of every file copied into the Emscripten FS
-const syncedFiles = new Map<string, number>();
+// Restarting the worker means re-initializing wasm and re-syncing the workspace, so
+// short compiles are cheaper to let finish
+const RESTART_AFTER_MS = 2000;
 
-// Mirror the OPFS workspace into the Emscripten FS, copying only changed files
-async function syncOpfsToEmscripten(efs: any) {
-  try {
-    const tree = await opfs.readdirTree("/");
-    const seen = new Set<string>();
-
-    const traverse = async (nodes: FileItem[]) => {
-      for (const node of nodes) {
-        if (node.isDir) {
-          try {
-            efs.mkdir(node.path);
-          } catch {
-            // directory likely already exists
-          }
-          await traverse(node.children ?? []);
-          continue;
-        }
-
-        seen.add(node.path);
-        if (node.lastModified !== undefined && syncedFiles.get(node.path) === node.lastModified) {
-          continue;
-        }
-        const buffer = await opfs.readFileBuffer(node.path);
-        efs.writeFile(node.path, new Uint8Array(buffer));
-        syncedFiles.set(node.path, node.lastModified ?? 0);
-      }
-    };
-    await traverse(tree);
-
-    // Remove files that were deleted or moved in OPFS
-    for (const path of syncedFiles.keys()) {
-      if (!seen.has(path)) {
-        try {
-          efs.unlink(path);
-        } catch {
-          // already gone
-        }
-        syncedFiles.delete(path);
-      }
-    }
-  } catch (err) {
-    console.error("Error synchronizing OPFS to Emscripten FS:", err);
+export class CompileCancelledError extends Error {
+  constructor() {
+    super("Compilation cancelled");
+    this.name = "CompileCancelledError";
   }
 }
 
-let globalScadInstance: any = null;
-
-async function getScadInstance() {
-  if (!globalScadInstance) {
-    globalScadInstance = await OpenSCAD({
-      noInitialRun: true,
-      noExitRuntime: true,
-      print: (text: string) => {
-        console.log("[OpenSCAD WASM stdout]:", text);
-        useScadStore.getState().addLog(text, "info");
-      },
-      printErr: (text: string) => {
-        console.error("[OpenSCAD WASM stderr]:", text);
-        const isError = /error|failed/i.test(text) && !/warning/i.test(text);
-        useScadStore.getState().addLog(text, isError ? "error" : "info");
-      },
-    });
-
-    globalScadInstance.FS.chdir("/");
-    try {
-      globalScadInstance.FS.mkdir("/locale");
-    } catch {
-      /* locale directory already exists or error */
-    }
-  }
-
-  // Sync workspace files from OPFS to Emscripten FS
-  console.log("Synchronizing OPFS files to Emscripten FS...");
-  await syncOpfsToEmscripten(globalScadInstance.FS);
-
-  return globalScadInstance;
+interface Job {
+  request: CompileRequest;
+  resolve: (url: string) => void;
+  reject: (err: Error) => void;
+  startedAt: number;
 }
 
-// Compile the given entry file from the workspace; includes resolve relative to it
-export async function generateModel(mainPath: string, variables: any[] = []): Promise<string> {
+let worker: Worker | null = null;
+let nextId = 0;
+let running: Job | null = null;
+let pending: Job | null = null;
+
+function createWorker() {
+  const w = new Worker(new URL("./scad.worker.ts", import.meta.url), { type: "module" });
+  w.onmessage = (e: MessageEvent<WorkerMessage>) => handleMessage(e.data);
+  w.onerror = (e) => {
+    console.error("OpenSCAD worker crashed:", e);
+    restartWorker(new Error(`OpenSCAD worker crashed: ${e.message}`));
+  };
+  return w;
+}
+
+function handleMessage(msg: WorkerMessage) {
+  // Ignore messages from a job that was cancelled in the meantime
+  if (!running || msg.id !== running.request.id) return;
+  const { addLog } = useScadStore.getState();
+
+  if (msg.type === "log") {
+    addLog(msg.text, msg.level);
+    return;
+  }
+
+  const job = running;
+  running = null;
+  if (msg.status === "ok") {
+    addLog(`Compilation completed successfully in ${msg.seconds}s`, "info");
+    job.resolve(URL.createObjectURL(msg.glb));
+  } else if (msg.status === "empty") {
+    addLog(`Compilation completed in ${msg.seconds}s (empty model)`, "info");
+    job.resolve("");
+  } else {
+    addLog(`${msg.error}, keeping the previous model`, "error");
+    job.reject(new Error(msg.error));
+  }
+  startNext();
+}
+
+function startNext() {
   const store = useScadStore.getState();
-  store.setCompiling(true);
-  store.clearLogs();
-
-  try {
-    const instance = await getScadInstance();
-
-    if (!instance.FS.analyzePath(mainPath).exists) {
-      store.addLog(`Main file ${mainPath} not found`, "error");
-      throw new Error(`Main file ${mainPath} not found`);
-    }
-
-    // Remove the previous output so an empty result doesn't show the last model again
-    if (instance.FS.analyzePath("/model.off").exists) {
-      instance.FS.unlink("/model.off");
-    }
-
-    // Build compilation args with parameters overrides (-D flags)
-    const compileArgs = [mainPath, "--backend=manifold", "--export-format=off", "-o", "/model.off"];
-
-    // Append custom parameters from the Customizer Panel if any
-    for (const v of variables) {
-      let valStr = String(v.value);
-      if (v.type === "string") {
-        valStr = `"${v.value}"`;
-      }
-      compileArgs.push("-D", `${v.name}=${valStr}`);
-    }
-
-    store.addLog(`Compiling with args: ${compileArgs.join(" ")}`, "info");
-    const startTime = performance.now();
-    const success = await compileScad(instance, compileArgs);
-    const compileTime = ((performance.now() - startTime) / 1000).toFixed(2);
-
-    // OpenSCAD exits with an error when the top level object is empty, but that is a
-    // valid (empty) model rather than a compile failure
-    const isEmpty = useScadStore
-      .getState()
-      .logs.some((log) => log.text.includes("Current top level object is empty"));
-    if (isEmpty) {
-      store.addLog(`Compilation completed in ${compileTime}s (empty model)`, "info");
-      return "";
-    }
-
-    if (!success || !instance.FS.analyzePath("/model.off").exists) {
-      store.addLog("Compilation failed, keeping the previous model", "error");
-      throw new Error("Failed to compile SCAD code");
-    }
-
-    store.addLog(`Compilation completed successfully in ${compileTime}s`, "info");
-
-    const fileUrl = await convertOffToGlb(instance);
-    if (!fileUrl) throw new Error("Failed to convert OFF to GLB");
-
-    return fileUrl;
-  } finally {
+  if (!pending) {
     store.setCompiling(false);
+    return;
   }
+  running = pending;
+  pending = null;
+  running.startedAt = performance.now();
+  store.clearLogs();
+  store.setCompiling(true);
+  worker ??= createWorker();
+  worker.postMessage(running.request);
 }
 
-async function compileScad(instance: any, args: string[]) {
-  try {
-    // callMain returns OpenSCAD's exit code instead of throwing on errors
-    const exitCode = await instance.callMain(args);
-    return exitCode === 0;
-  } catch (error) {
-    console.error("Error generating model:", error);
-    return false;
-  }
+// Abort the running compile; the worker can't be interrupted, so replace it
+function restartWorker(reason: Error) {
+  worker?.terminate();
+  worker = null;
+  const job = running;
+  running = null;
+  job?.reject(reason);
+  startNext();
 }
 
-async function convertOffToGlb(instance: any) {
-  try {
-    if (!instance.FS.analyzePath("/model.off").exists) {
-      console.error("Output file '/model.off' does not exist");
-      return;
+/**
+ * Compile the given entry file from the workspace (includes resolve relative to it).
+ * Resolves with an object URL of the GLB model, or "" for an empty model. Rejects with
+ * CompileCancelledError when a newer request supersedes this one.
+ */
+export function generateModel(mainPath: string, variables: ParamVariable[] = []): Promise<string> {
+  return new Promise((resolve, reject) => {
+    pending?.reject(new CompileCancelledError());
+    pending = {
+      request: {
+        id: nextId++,
+        mainPath,
+        variables: variables.map(({ name, value, type }) => ({ name, value, type })),
+      },
+      resolve,
+      reject,
+      startedAt: 0,
+    };
+
+    if (!running) {
+      startNext();
+    } else if (performance.now() - running.startedAt > RESTART_AFTER_MS) {
+      restartWorker(new CompileCancelledError());
     }
+  });
+}
 
-    const output = instance.FS.readFile("/model.off");
-    const decoder = new TextDecoder("utf-8");
-    const offFileContent = decoder.decode(output);
-    console.log("DEBUG: Raw OFF file content:", JSON.stringify(offFileContent));
-
-    const parsedOutput = parseOff(offFileContent);
-    const glbData = await exportGlb(parsedOutput);
-    const displayFile = new File([glbData], "model.glb");
-    const fileUrl = displayFile && (await readFileAsDataURL(displayFile));
-
-    return fileUrl;
-  } catch (error) {
-    console.error("Error converting OFF to GLB:", error);
+/** Stop the running compile and drop any queued one. */
+export function cancelCompile() {
+  pending?.reject(new CompileCancelledError());
+  pending = null;
+  if (running) {
+    useScadStore.getState().addLog("Compilation cancelled", "info");
+    restartWorker(new CompileCancelledError());
   }
 }

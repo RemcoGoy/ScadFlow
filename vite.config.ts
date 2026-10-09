@@ -14,6 +14,11 @@ export default defineConfig({
     },
   },
 
+  // The OpenSCAD worker is a module worker that code-splits the wasm loader
+  worker: {
+    format: "es",
+  },
+
   // Limit dependency scanning to index.html to prevent scanning the libs/ folder
   optimizeDeps: {
     entries: ["index.html"],
