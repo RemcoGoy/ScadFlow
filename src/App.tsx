@@ -91,15 +91,13 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-canvas-bg overflow-hidden text-zinc-300 font-sans">
-      {/* ScadForge Top Navigation Header */}
+      {/* Top Navigation Header */}
       <header className="flex-shrink-0 flex items-center justify-between px-4 h-12 bg-header-bg border-b border-border-figma select-none z-50">
         <div className="flex items-center space-x-2.5">
           {/* Logo Icon */}
           <Boxes className="h-5 w-5 text-scad-amber flex-shrink-0" />
           <div className="flex items-baseline space-x-2.5">
-            <h1 className="text-sm font-bold tracking-wide text-zinc-100 font-display">
-              ScadForge
-            </h1>
+            <h1 className="text-sm font-bold tracking-wide text-zinc-100 font-display">ScadFlow</h1>
             <span className="px-2 py-0.5 rounded text-[10px] text-zinc-400 font-mono bg-panel-bg font-semibold select-none border border-border-figma/40">
               openscad-wasm
             </span>

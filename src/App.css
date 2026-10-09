@@ -6,7 +6,7 @@
   --font-display: "Outfit", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
-  /* Custom ScadForge/ScadFlow Dark Amber Palette */
+  /* Custom ScadFlow Dark Amber Palette */
   --color-scad-amber: #e2a04e;
   --color-scad-amber-dark: #b87b31;
   --color-scad-amber-bg: rgba(226, 160, 78, 0.08);
@@ -52,7 +52,7 @@
   scrollbar-width: none;
 }
 
-/* Custom Slider styling to match Figma/ScadForge property sliders */
+/* Custom Slider styling to match the Figma property sliders */
 input[type="range"].figma-slider {
   -webkit-appearance: none;
   appearance: none;

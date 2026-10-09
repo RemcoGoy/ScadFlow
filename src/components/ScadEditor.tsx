@@ -100,7 +100,7 @@ export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
   };
 
   const onMount = (editor: monaco.editor.IStandaloneCodeEditor, monaco: Monaco) => {
-    // Define a premium custom theme matching ScadForge mockup colors
+    // Define a premium custom theme matching the ScadFlow mockup colors
     monaco.editor.defineTheme("scadflow-dark", {
       base: "vs-dark",
       inherit: true,
