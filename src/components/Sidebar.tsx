@@ -1,6 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useScadStore, FileItem } from "@/store/scadStore";
-import { isFileSystemAccessSupported, syncDirectoryHandleToOpfs } from "@/lib/fs/fileSystemAccess";
+import { importFileListToOpfs } from "@/lib/fs/fileSystemAccess";
+import {
+  isLinkingSupported,
+  linkFolder,
+  reconnectFolder,
+  syncLinkedFolder,
+  unlinkFolder,
+} from "@/lib/fs/linkedFolder";
+import { workspace } from "@/lib/fs/workspace";
 import { opfs, getParentDir } from "@/lib/fs/opfs";
 import JSZip from "jszip";
 import { flushSaves } from "@/lib/fs/saveQueue";
@@ -10,6 +18,9 @@ import {
   FilePlus,
   FolderPlus,
   FolderSync,
+  Link2,
+  RefreshCw,
+  Unlink,
   Pencil,
   Play,
   Trash2,
@@ -30,6 +41,7 @@ export function Sidebar() {
     openFile,
     closeFile,
     renameOpenPath,
+    linkedFolder,
   } = useScadStore();
 
   const [newFileName, setNewFileName] = useState("");
@@ -97,20 +109,42 @@ export function Sidebar() {
     });
   };
 
+  // Fallback folder picker for browsers without the File System Access API (Firefox, Safari)
+  const directoryInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDirectoryInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    if (!input.files || input.files.length === 0) return;
+    try {
+      await importFileListToOpfs(input.files, "/");
+      await refreshFileTree();
+    } catch (err: any) {
+      alert(`Failed to import folder: ${err.message}`);
+    } finally {
+      // Allow picking the same folder again
+      input.value = "";
+    }
+  };
+
+  // Chromium links the folder for two-way sync; other browsers can only import a copy
   const handleOpenLocalDirectory = async () => {
-    if (!isFileSystemAccessSupported) {
-      alert(
-        "File System Access API is not supported in this browser. Please use Drag and Drop to upload files.",
-      );
+    if (!isLinkingSupported) {
+      directoryInputRef.current?.click();
       return;
     }
     try {
-      const handle = await (window as any).showDirectoryPicker();
-      await syncDirectoryHandleToOpfs(handle, "/");
-      await refreshFileTree();
-    } catch (err) {
-      console.error("Error choosing directory:", err);
+      await linkFolder();
+    } catch (err: any) {
+      if (err?.name !== "AbortError") alert(`Failed to link folder: ${err.message}`);
     }
+  };
+
+  const handleUnlinkFolder = async () => {
+    if (!linkedFolder) return;
+    const ok = confirm(
+      `Unlink "${linkedFolder.name}"?\n\nThe files stay in the browser workspace, but changes are no longer written to the folder.`,
+    );
+    if (ok) await unlinkFolder();
   };
 
   // The editor loads the file contents when the active file changes
@@ -123,7 +157,7 @@ export function Sidebar() {
     const fullPath = `${parent}/${cleanName}`;
 
     try {
-      await opfs.writeFile(fullPath, "");
+      await workspace.writeFile(fullPath, "");
       setNewFileName("");
       setIsCreatingFile(false);
       await refreshFileTree();
@@ -140,7 +174,7 @@ export function Sidebar() {
     const fullPath = `${parent}/${cleanName}`;
 
     try {
-      await opfs.mkdir(fullPath);
+      await workspace.mkdir(fullPath);
       setNewFileName("");
       setIsCreatingFolder(false);
       await refreshFileTree();
@@ -157,13 +191,13 @@ export function Sidebar() {
 
     try {
       if (isDir) {
-        await opfs.rmdir(path);
+        await workspace.rmdir(path);
         // Close tabs of files that were inside the folder
         for (const openPath of useScadStore.getState().openFiles) {
           if (openPath.startsWith(`${path}/`)) closeFile(openPath);
         }
       } else {
-        await opfs.unlink(path);
+        await workspace.unlink(path);
         closeFile(path);
       }
       await refreshFileTree();
@@ -188,7 +222,7 @@ export function Sidebar() {
 
     try {
       await flushSaves();
-      await opfs.rename(oldPath, newPath);
+      await workspace.rename(oldPath, newPath);
       setRenamingPath(null);
       renameOpenPath(oldPath, newPath);
       await refreshFileTree();
@@ -256,7 +290,7 @@ export function Sidebar() {
         return;
       }
       await flushSaves();
-      await opfs.rename(srcPath, newPath);
+      await workspace.rename(srcPath, newPath);
       renameOpenPath(srcPath, newPath);
       await refreshFileTree();
     } catch (err: any) {
@@ -275,7 +309,7 @@ export function Sidebar() {
           promises.push(
             (async () => {
               const buffer = await file.arrayBuffer();
-              await opfs.writeFile(`${parent}/${file.name}`, buffer);
+              await workspace.writeFile(`${parent}/${file.name}`, buffer);
             })(),
           );
         }
@@ -338,6 +372,25 @@ export function Sidebar() {
     setRenamingPath(node.path);
   };
 
+  const folderMenuItems = (): ContextMenuItem[] => {
+    if (!linkedFolder) {
+      return [
+        {
+          label: isLinkingSupported ? "Link Local Folder" : "Import Local Folder",
+          icon: isLinkingSupported ? <Link2 /> : <FolderSync />,
+          onSelect: handleOpenLocalDirectory,
+        },
+      ];
+    }
+    return [
+      linkedFolder.connected
+        ? { label: "Sync with Folder Now", icon: <RefreshCw />, onSelect: () => syncLinkedFolder() }
+        : { label: "Reconnect Folder", icon: <RefreshCw />, onSelect: reconnectFolder },
+      { label: "Link a Different Folder", icon: <Link2 />, onSelect: handleOpenLocalDirectory },
+      { label: "Unlink Folder", icon: <Unlink />, onSelect: handleUnlinkFolder },
+    ];
+  };
+
   const getContextMenuItems = (node: FileItem | null): ContextMenuItem[] => {
     // Empty space in the tree: create at the root
     if (!node) {
@@ -345,7 +398,7 @@ export function Sidebar() {
         { label: "New File", icon: <FilePlus />, onSelect: () => startCreating("file", "/") },
         { label: "New Folder", icon: <FolderPlus />, onSelect: () => startCreating("folder", "/") },
         "separator",
-        { label: "Sync Local Directory", icon: <FolderSync />, onSelect: handleOpenLocalDirectory },
+        ...folderMenuItems(),
       ];
     }
 
@@ -593,6 +646,14 @@ export function Sidebar() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <input
+        ref={directoryInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleDirectoryInputChange}
+        {...{ webkitdirectory: "", directory: "" }}
+      />
+
       {/* File Action Buttons Panel matching the design mock */}
       <div className="p-3 border-b border-border-figma flex space-x-2">
         <button
@@ -607,13 +668,63 @@ export function Sidebar() {
         >
           + Folder
         </button>
-        <button
-          onClick={handleOpenLocalDirectory}
-          className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
-        >
-          ↑ Sync Dir
-        </button>
+        {!linkedFolder && (
+          <button
+            onClick={handleOpenLocalDirectory}
+            title={
+              isLinkingSupported
+                ? "Open a folder on disk and keep it in sync with the workspace"
+                : "Copy a folder from disk into the workspace (two-way sync needs Chrome or Edge)"
+            }
+            className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
+          >
+            {isLinkingSupported ? "↔ Link Dir" : "↑ Import"}
+          </button>
+        )}
       </div>
+
+      {/* Linked folder status */}
+      {linkedFolder && (
+        <div className="px-3 py-1.5 border-b border-border-figma flex items-center space-x-2 text-[10px] font-sans">
+          <Link2
+            className={`h-3 w-3 flex-shrink-0 ${linkedFolder.connected ? "text-scad-amber" : "text-zinc-600"}`}
+          />
+          <span
+            className="truncate flex-1 text-zinc-400"
+            title={
+              linkedFolder.connected
+                ? "Changes are saved to this folder; changes on disk are pulled in when the app regains focus"
+                : "Permission is needed again after reloading"
+            }
+          >
+            {linkedFolder.connected ? "Synced with " : "Not connected: "}
+            <span className="font-mono text-zinc-200">{linkedFolder.name}</span>
+          </span>
+          {linkedFolder.connected ? (
+            <button
+              onClick={() => syncLinkedFolder()}
+              className="p-0.5 rounded text-zinc-500 hover:text-zinc-300 hover:bg-[#1a2232]"
+              title="Sync now"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          ) : (
+            <button
+              onClick={reconnectFolder}
+              className="py-0.5 px-1.5 rounded bg-scad-amber text-[#0b0e14] font-bold text-[9px]"
+            >
+              Reconnect
+            </button>
+          )}
+          <button
+            onClick={handleUnlinkFolder}
+            className="p-0.5 rounded text-zinc-500 hover:text-red-400 hover:bg-[#1a2232]"
+            title="Unlink folder"
+          >
+            <Unlink className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* Creation fields modal */}
       {(isCreatingFile || isCreatingFolder) && (

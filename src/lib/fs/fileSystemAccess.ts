@@ -34,3 +34,16 @@ export async function syncFileToHandle(
   await writable.write(content);
   await writable.close();
 }
+
+/**
+ * Fallback for browsers without showDirectoryPicker: import the files from an
+ * `<input type="file" webkitdirectory>`. Paths are relative to the picked folder, so
+ * its contents land in targetPath, matching syncDirectoryHandleToOpfs.
+ */
+export async function importFileListToOpfs(files: FileList, targetPath = "/"): Promise<void> {
+  const parent = targetPath === "/" ? "" : targetPath;
+  for (const file of Array.from(files)) {
+    const relativePath = file.webkitRelativePath.split("/").slice(1).join("/") || file.name;
+    await opfs.writeFile(`${parent}/${relativePath}`, await file.arrayBuffer());
+  }
+}

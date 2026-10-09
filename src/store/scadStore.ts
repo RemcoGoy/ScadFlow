@@ -39,6 +39,8 @@ interface ScadState {
   mainFilePath: string;
   // Incremented whenever workspace files change on disk; triggers auto-render
   fsVersion: number;
+  // Folder on disk kept in sync with the workspace (Chromium only)
+  linkedFolder: { name: string; connected: boolean } | null;
   filesList: FileItem[];
   logs: LogEntry[];
   isCompiling: boolean;
@@ -59,6 +61,7 @@ interface ScadState {
   loadFile: (path: string, content: string) => void;
   setMainFilePath: (path: string) => void;
   bumpFsVersion: () => void;
+  setLinkedFolder: (linkedFolder: { name: string; connected: boolean } | null) => void;
   setFilesList: (files: FileItem[]) => void;
   addLog: (text: string, type: "info" | "error") => void;
   clearLogs: () => void;
@@ -105,6 +108,7 @@ draw_object();
         codeFilePath: "",
         mainFilePath: "/main.scad",
         fsVersion: 0,
+        linkedFolder: null,
         filesList: [],
         logs: [],
         isCompiling: false,
@@ -124,6 +128,7 @@ draw_object();
         setCodeFilePath: (codeFilePath) => set({ codeFilePath }),
         loadFile: (path, content) => set({ scadCode: content, codeFilePath: path }),
         setMainFilePath: (mainFilePath) => set({ mainFilePath }),
+        setLinkedFolder: (linkedFolder) => set({ linkedFolder }),
         bumpFsVersion: () => set((state) => ({ fsVersion: state.fsVersion + 1 })),
         setFilesList: (filesList) => set({ filesList }),
         addLog: (text, type) =>

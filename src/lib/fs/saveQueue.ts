@@ -1,4 +1,4 @@
-import { opfs } from "@/lib/fs/opfs";
+import { workspace } from "@/lib/fs/workspace";
 import { useScadStore } from "@/store/scadStore";
 
 // Debounced writes of editor/customizer content to OPFS, shared by every component
@@ -35,7 +35,7 @@ export function flushSaves(): Promise<void> {
     chain = chain.then(async () => {
       for (const [path, code] of writes) {
         try {
-          await opfs.writeFile(path, code);
+          await workspace.writeFile(path, code);
         } catch (e) {
           console.error(`Failed to save file ${path}:`, e);
         }

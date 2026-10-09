@@ -8,6 +8,7 @@ import { Customizer } from "@/components/Customizer.tsx";
 import { useScadStore } from "@/store/scadStore.ts";
 import { generateModel } from "./lib/service/scad";
 import { flushSaves } from "@/lib/fs/saveQueue";
+import { restoreLinkedFolder } from "@/lib/fs/linkedFolder";
 import { useEffect, useRef } from "react";
 import {
   Group as PanelGroup,
@@ -68,6 +69,11 @@ function App() {
       console.error("Error during compilation:", error);
     }
   };
+
+  // Reconnect to the folder linked in a previous session
+  useEffect(() => {
+    restoreLinkedFolder();
+  }, []);
 
   // Switching the main file always needs a new render
   useEffect(() => {

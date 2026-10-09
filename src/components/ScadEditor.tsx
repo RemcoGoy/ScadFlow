@@ -5,6 +5,7 @@ import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import Editor, { loader, Monaco } from "@monaco-editor/react";
 import { opfs } from "@/lib/fs/opfs";
 import { flushSaves, markSaved, queueSave } from "@/lib/fs/saveQueue";
+import { workspace } from "@/lib/fs/workspace";
 
 const isMonacoSupported = (() => {
   const ua = window.navigator.userAgent;
@@ -59,7 +60,7 @@ export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
         if (!(await opfs.exists(activeFilePath))) {
           // File doesn't exist yet (e.g. first load), write the default code to it
           content = useScadStore.getState().scadCode;
-          await opfs.writeFile(activeFilePath, content);
+          await workspace.writeFile(activeFilePath, content);
           window.dispatchEvent(new Event("fs-update"));
         } else {
           content = await opfs.readFile(activeFilePath);
