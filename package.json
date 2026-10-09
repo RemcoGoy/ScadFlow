@@ -13,7 +13,6 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@codemirror/lang-javascript": "^6.2.3",
     "@gltf-transform/core": "^4.1.1",
     "@gltf-transform/extensions": "^4.1.1",
     "@monaco-editor/loader": "^1.5.0",

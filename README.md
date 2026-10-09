@@ -4,8 +4,6 @@
 
 A modern, feature-rich editor for OpenSCAD, built with [React](https://reactjs.org/) and [TypeScript](https://www.typescriptlang.org/). Create, edit, and visualize 3D models, powered by WebAssembly.
 
-![OpenSCAD Web Editor Screenshot](screenshot.png)
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenSCAD](https://img.shields.io/badge/Powered%20by-OpenSCAD-green)](https://openscad.org/)
 
@@ -13,23 +11,28 @@ A modern, feature-rich editor for OpenSCAD, built with [React](https://reactjs.o
 
 ## ✨ Features
 
-- 🚀 **Real-time Compilation & Preview**: Instantly compile your OpenSCAD code and view the 3D model in real time.
-- 🌐 **WebAssembly Engine**: Runs the original OpenSCAD interpreter directly in your browser or desktop environment.
+- 🚀 **Real-time Compilation & Preview**: Your model re-renders automatically as you edit, shown in a three.js viewport.
+- 🌐 **WebAssembly Engine**: Runs the original OpenSCAD interpreter directly in your browser, no install needed.
 - 📝 **Monaco-based Editor**: Includes syntax highlighting, custom auto-completions, and snippets built specifically for OpenSCAD.
 - 🎛️ **Parameters Customizer**: Interactively modify your model parameters (like sizes, counts, shapes) with auto-generated sliders and dropdowns.
-- 📁 **File System Integration**: Full virtual workspace with support for importing local directories using the File System Access API and exporting zip archives.
-- 💻 **Cross-platform**: Runs seamlessly on Windows, macOS, and Linux in any modern web browser.
+- 📁 **Multi-file Workspace**: Organize files in folders with drag-and-drop and a right-click menu. Changes are saved automatically in the browser (OPFS), and you can export everything as a zip.
+- 🎯 **Main File**: Pick the file to render; it stays rendered while you edit the files it `include`s or `use`s.
+- 🔗 **Local Folder Sync**: Link a folder on disk (Chrome and Edge) to keep it in sync with the workspace in both directions, so you can work alongside your own editor or git. Other browsers can import a folder.
 
 ## 🗺️ Roadmap
 
 - [x] Syntax highlighting
 - [x] Auto-completion and code snippets
-- [x] File system integration
+- [x] Multi-file workspace with main file selection
+- [x] Two-way sync with a local folder
 - [x] Export to various 3D formats (OFF and GLB)
 - [x] Parameter customization UI
-- [ ] Integrated documentation viewer
-- [ ] Integrated debugging tools
-- [ ] Flow editor
+- [ ] Viewport tools: section planes, measurements, animation
+- [ ] Sharing designs via URL
+- [ ] Mesh analysis and 3D printer integrations
+- [ ] Visual flow editor
+
+See [ROADMAP.md](ROADMAP.md) for details.
 
 ## 🛠️ Prerequisites
 

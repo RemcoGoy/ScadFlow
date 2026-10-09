@@ -39,7 +39,6 @@ export default [
       "node_modules/**",
       "dist/**",
       "build/**",
-      "src-tauri/**",
       "libs/**",
       "public/openscad.js",
       "public/openscad.wasm",
