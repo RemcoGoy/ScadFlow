@@ -21,6 +21,25 @@ async function resolveDirectory(
   return dirHandle;
 }
 
+async function copyDirectory(
+  src: FileSystemDirectoryHandle,
+  dest: FileSystemDirectoryHandle,
+): Promise<void> {
+  // @ts-expect-error (values() exists on FileSystemDirectoryHandle in modern browsers)
+  for await (const entry of src.values()) {
+    if (entry.kind === "directory") {
+      const child = await dest.getDirectoryHandle(entry.name, { create: true });
+      await copyDirectory(entry as FileSystemDirectoryHandle, child);
+    } else {
+      const file = await (entry as FileSystemFileHandle).getFile();
+      const fileHandle = await dest.getFileHandle(entry.name, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(await file.arrayBuffer());
+      await writable.close();
+    }
+  }
+}
+
 export const opfs = {
   async readFile(path: string): Promise<string> {
     const parentPath = getParentDir(path);
@@ -171,11 +190,15 @@ export const opfs = {
     }
 
     if (isDir) {
-      // OPFS doesn't support renaming directories directly yet without Move API
-      // We must copy recursively and delete
-      throw new Error(
-        "Directory renaming not fully supported natively without Move API. Copy required.",
-      );
+      if (newPath === oldPath || newPath.startsWith(`${oldPath}/`)) {
+        throw new Error("Cannot move a folder into itself");
+      }
+      // OPFS has no reliable directory move, so copy recursively and delete
+      const srcHandle = await oldDirHandle.getDirectoryHandle(oldName);
+      const newDirHandle = await resolveDirectory(newParentPath, true);
+      const destHandle = await newDirHandle.getDirectoryHandle(newName, { create: true });
+      await copyDirectory(srcHandle, destHandle);
+      await oldDirHandle.removeEntry(oldName, { recursive: true });
     } else {
       const fileHandle = await oldDirHandle.getFileHandle(oldName);
 

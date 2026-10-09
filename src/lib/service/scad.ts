@@ -105,6 +105,11 @@ export async function generateModel(code: string, variables: any[] = []): Promis
     // Write current editor contents to virtual input file
     instance.FS.writeFile("/input.scad", code);
 
+    // Remove the previous output so an empty result doesn't show the last model again
+    if (instance.FS.analyzePath("/model.off").exists) {
+      instance.FS.unlink("/model.off");
+    }
+
     // Build compilation args with parameters overrides (-D flags)
     const compileArgs = [
       "/input.scad",
@@ -128,7 +133,18 @@ export async function generateModel(code: string, variables: any[] = []): Promis
     const success = await compileScad(instance, compileArgs);
     const compileTime = ((performance.now() - startTime) / 1000).toFixed(2);
 
-    if (!success) {
+    // OpenSCAD exits with an error when the top level object is empty, but that is a
+    // valid (empty) model rather than a compile failure
+    const isEmpty = useScadStore
+      .getState()
+      .logs.some((log) => log.text.includes("Current top level object is empty"));
+    if (isEmpty) {
+      store.addLog(`Compilation completed in ${compileTime}s (empty model)`, "info");
+      return "";
+    }
+
+    if (!success || !instance.FS.analyzePath("/model.off").exists) {
+      store.addLog("Compilation failed, keeping the previous model", "error");
       throw new Error("Failed to compile SCAD code");
     }
 
@@ -145,8 +161,9 @@ export async function generateModel(code: string, variables: any[] = []): Promis
 
 async function compileScad(instance: any, args: string[]) {
   try {
-    await instance.callMain(args);
-    return true;
+    // callMain returns OpenSCAD's exit code instead of throwing on errors
+    const exitCode = await instance.callMain(args);
+    return exitCode === 0;
   } catch (error) {
     console.error("Error generating model:", error);
     return false;

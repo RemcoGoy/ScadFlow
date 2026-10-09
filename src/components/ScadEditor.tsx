@@ -1,5 +1,5 @@
 import { useScadStore } from "@/store/scadStore";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import openscadEditorOptions from "@/language/openscad-editor-options";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
 import Editor, { loader, Monaco } from "@monaco-editor/react";
@@ -21,30 +21,86 @@ interface ScadEditorProps {
 }
 
 export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
-  const { scadCode, setScadCode, activeFilePath, openFiles, autoRender } = useScadStore();
+  const {
+    scadCode,
+    setScadCode,
+    activeFilePath,
+    codeFilePath,
+    setCodeFilePath,
+    loadFile,
+    openFiles,
+    autoRender,
+  } = useScadStore();
   const [editor, setEditor] = useState(null as monaco.editor.IStandaloneCodeEditor | null);
 
-  // Read file from OPFS when active file changes
+  // Autosave state: the edit waiting to be written, and the contents last known on disk
+  const pendingSaveRef = useRef<{ path: string; code: string } | null>(null);
+  const lastSavedRef = useRef<string | null>(null);
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  const flushSave = useCallback(() => {
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (pending) {
+      // Chain writes so two saves never write the same file concurrently
+      saveChainRef.current = saveChainRef.current.then(async () => {
+        try {
+          await opfs.writeFile(pending.path, pending.code);
+        } catch (e) {
+          console.error(`Failed to save file ${pending.path}:`, e);
+        }
+      });
+    }
+    return saveChainRef.current;
+  }, []);
+
+  // Queue a debounced save whenever the loaded file's code changes (editor or customizer)
+  useEffect(() => {
+    if (!codeFilePath || scadCode === lastSavedRef.current) return;
+    pendingSaveRef.current = { path: codeFilePath, code: scadCode };
+    lastSavedRef.current = scadCode;
+    const timer = setTimeout(flushSave, 500);
+    return () => clearTimeout(timer);
+  }, [scadCode, codeFilePath, flushSave]);
+
+  // Don't lose the last edit when the tab is hidden or closed
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushSave();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [flushSave]);
+
+  // Save the previous file, then read the new one from OPFS when the active file changes
   useEffect(() => {
     if (!activeFilePath) return;
+    let cancelled = false;
     const fetchFile = async () => {
+      setCodeFilePath("");
+      await flushSave();
       try {
-        const fileExists = await opfs.exists(activeFilePath);
-        if (!fileExists) {
+        let content: string;
+        if (!(await opfs.exists(activeFilePath))) {
           // File doesn't exist yet (e.g. first load), write the default code to it
-          const currentCode = useScadStore.getState().scadCode;
-          await opfs.writeFile(activeFilePath, currentCode);
+          content = useScadStore.getState().scadCode;
+          await opfs.writeFile(activeFilePath, content);
           window.dispatchEvent(new Event("fs-update"));
         } else {
-          const content = await opfs.readFile(activeFilePath);
-          setScadCode(content);
+          content = await opfs.readFile(activeFilePath);
         }
+        if (cancelled) return;
+        lastSavedRef.current = content;
+        loadFile(activeFilePath, content);
       } catch (e) {
         console.error("Error reading file in editor mount:", e);
       }
     };
     fetchFile();
-  }, [activeFilePath, setScadCode]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFilePath, setCodeFilePath, loadFile, flushSave]);
 
   const compileTriggerRef = useRef(onCompileTrigger);
   useEffect(() => {
@@ -53,12 +109,13 @@ export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
 
   // Debounced auto-compilation (1000ms delay after typing)
   useEffect(() => {
-    if (!scadCode || !autoRender) return;
+    // An empty file still compiles (to an empty model); only skip while a file is loading
+    if (!codeFilePath || !autoRender) return;
     const timer = setTimeout(() => {
       compileTriggerRef.current();
     }, 1000);
     return () => clearTimeout(timer);
-  }, [scadCode, autoRender]);
+  }, [scadCode, codeFilePath, autoRender]);
 
   if (editor) {
     const checkerRun = { markers: [] };
@@ -114,16 +171,8 @@ export function ScadEditor({ onCompileTrigger }: ScadEditorProps) {
       id: "openscad-save",
       label: "Save OpenSCAD",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-      run: async (ed) => {
-        const val = ed.getValue();
-        if (activeFilePath) {
-          try {
-            await opfs.writeFile(activeFilePath, val);
-            console.log(`Saved file to OPFS: ${activeFilePath}`);
-          } catch (e) {
-            console.error(`Failed to save file ${activeFilePath}:`, e);
-          }
-        }
+      run: async () => {
+        await flushSave();
       },
     });
 

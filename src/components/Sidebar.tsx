@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
 import { useScadStore, FileItem } from "@/store/scadStore";
 import { isFileSystemAccessSupported, syncDirectoryHandleToOpfs } from "@/lib/fs/fileSystemAccess";
-import { opfs } from "@/lib/fs/opfs";
+import { opfs, getParentDir } from "@/lib/fs/opfs";
 import JSZip from "jszip";
+import { FilePlus, FolderPlus } from "lucide-react";
+
+// dataTransfer type used for dragging tree items, to tell them apart from OS file drops
+const TREE_ITEM_MIME = "application/x-scadflow-path";
 
 export function Sidebar() {
-  const { filesList, setFilesList, activeFilePath, openFile, closeFile, setScadCode } =
+  const { filesList, setFilesList, activeFilePath, openFile, closeFile, renameOpenPath } =
     useScadStore();
 
   const [newFileName, setNewFileName] = useState("");
@@ -20,6 +24,7 @@ export function Sidebar() {
   const [renameValue, setRenameValue] = useState("");
 
   const [isDragging, setIsDragging] = useState(false);
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
 
   const refreshFileTree = async () => {
     const tree = await readOpfsDirectoryTree("/");
@@ -80,15 +85,8 @@ export function Sidebar() {
     }
   };
 
-  const handleOpenFile = async (path: string) => {
-    try {
-      const content = await opfs.readFile(path);
-      openFile(path);
-      setScadCode(content);
-    } catch (e) {
-      console.error("Error opening file:", e);
-    }
-  };
+  // The editor loads the file contents when the active file changes
+  const handleOpenFile = (path: string) => openFile(path);
 
   const handleCreateFile = async () => {
     if (!newFileName) return;
@@ -101,7 +99,7 @@ export function Sidebar() {
       setNewFileName("");
       setIsCreatingFile(false);
       await refreshFileTree();
-      await handleOpenFile(fullPath);
+      handleOpenFile(fullPath);
     } catch (e: any) {
       alert(`Failed to create file: ${e.message}`);
     }
@@ -157,13 +155,7 @@ export function Sidebar() {
     try {
       await opfs.rename(oldPath, newPath);
       setRenamingPath(null);
-
-      // Update open files state if renaming an open file
-      if (activeFilePath === oldPath) {
-        closeFile(oldPath);
-        openFile(newPath);
-      }
-
+      renameOpenPath(oldPath, newPath);
       await refreshFileTree();
     } catch (err: any) {
       alert(`Rename failed: ${err.message}`);
@@ -208,10 +200,75 @@ export function Sidebar() {
     }));
   };
 
+  const startCreating = (kind: "file" | "folder", folder: string) => {
+    setSelectedFolderForNewItem(folder);
+    setIsCreatingFile(kind === "file");
+    setIsCreatingFolder(kind === "folder");
+    if (folder !== "/") {
+      setCollapsedFolders((prev) => ({ ...prev, [folder]: false }));
+    }
+  };
+
+  const moveItem = async (srcPath: string, destDir: string) => {
+    const name = srcPath.split("/").pop();
+    if (!name || getParentDir(srcPath) === destDir) return;
+    if (destDir === srcPath || destDir.startsWith(`${srcPath}/`)) return;
+
+    const newPath = destDir === "/" ? `/${name}` : `${destDir}/${name}`;
+    try {
+      if (await opfs.exists(newPath)) {
+        alert(`${newPath} already exists`);
+        return;
+      }
+      await opfs.rename(srcPath, newPath);
+      renameOpenPath(srcPath, newPath);
+      await refreshFileTree();
+    } catch (err: any) {
+      alert(`Move failed: ${err.message}`);
+    }
+  };
+
+  const uploadFiles = async (dataTransfer: DataTransfer, destDir: string) => {
+    const parent = destDir === "/" ? "" : destDir;
+    const promises = [];
+    for (let i = 0; i < dataTransfer.items.length; i++) {
+      const item = dataTransfer.items[i];
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          promises.push(
+            (async () => {
+              const buffer = await file.arrayBuffer();
+              await opfs.writeFile(`${parent}/${file.name}`, buffer);
+            })(),
+          );
+        }
+      }
+    }
+    await Promise.all(promises);
+    await refreshFileTree();
+  };
+
+  const handleDropOn = async (e: React.DragEvent, destDir: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    setDropTargetPath(null);
+
+    const srcPath = e.dataTransfer.getData(TREE_ITEM_MIME);
+    if (srcPath) {
+      await moveItem(srcPath, destDir);
+    } else if (e.dataTransfer.items) {
+      await uploadFiles(e.dataTransfer, destDir);
+    }
+  };
+
   // Drag and drop handlers
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    // Only show the upload overlay for files coming from outside the app
+    setIsDragging(e.dataTransfer.types.includes("Files"));
+    setDropTargetPath(null);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -219,31 +276,7 @@ export function Sidebar() {
     setIsDragging(false);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    if (e.dataTransfer.items) {
-      const promises = [];
-      for (let i = 0; i < e.dataTransfer.items.length; i++) {
-        const item = e.dataTransfer.items[i];
-        if (item.kind === "file") {
-          const file = item.getAsFile();
-          if (file) {
-            promises.push(
-              (async () => {
-                const buffer = await file.arrayBuffer();
-                const fullPath = `/${file.name}`;
-                await opfs.writeFile(fullPath, buffer);
-              })(),
-            );
-          }
-        }
-      }
-      await Promise.all(promises);
-      await refreshFileTree();
-    }
-  };
+  const handleDrop = (e: React.DragEvent) => handleDropOn(e, "/");
 
   // Filter items based on search query
   const filterTree = (nodes: FileItem[], query: string): FileItem[] => {
@@ -269,14 +302,30 @@ export function Sidebar() {
       const isCollapsed = collapsedFolders[node.path] ?? false;
       const isActive = activeFilePath === node.path;
       const isRenaming = renamingPath === node.path;
+      const isDropTarget = node.isDir && dropTargetPath === node.path;
 
       return (
         <div key={node.path} className="pl-1 select-none">
           <div
+            draggable={!isRenaming}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(TREE_ITEM_MIME, node.path);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragEnd={() => setDropTargetPath(null)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Dropping on a file targets the folder that contains it
+              setDropTargetPath(node.isDir ? node.path : null);
+            }}
+            onDrop={(e) => handleDropOn(e, node.isDir ? node.path : getParentDir(node.path))}
             className={`group/item flex items-center justify-between py-1 px-3 rounded cursor-pointer transition-all duration-100 ${
-              isActive
-                ? "bg-[#2a2015] text-scad-amber font-semibold border-none"
-                : "text-zinc-400 hover:text-zinc-250 hover:bg-[#131924]/20"
+              isDropTarget
+                ? "bg-[#1d2737] ring-1 ring-inset ring-scad-amber/60 text-zinc-200"
+                : isActive
+                  ? "bg-[#2a2015] text-scad-amber font-semibold border-none"
+                  : "text-zinc-400 hover:text-zinc-250 hover:bg-[#131924]/20"
             }`}
             onClick={(e) => {
               if (isRenaming) return;
@@ -312,6 +361,30 @@ export function Sidebar() {
             {/* Actions */}
             {!isRenaming && (
               <div className="flex items-center space-x-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                {node.isDir && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startCreating("file", node.path);
+                      }}
+                      className="p-0.5 rounded transition-colors text-zinc-500 hover:text-zinc-300 hover:bg-[#1a2232]"
+                      title="New file in folder"
+                    >
+                      <FilePlus className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startCreating("folder", node.path);
+                      }}
+                      className="p-0.5 rounded transition-colors text-zinc-500 hover:text-zinc-300 hover:bg-[#1a2232]"
+                      title="New folder in folder"
+                    >
+                      <FolderPlus className="h-3 w-3" />
+                    </button>
+                  </>
+                )}
                 {/* Rename Button */}
                 <button
                   onClick={(e) => {
@@ -392,21 +465,13 @@ export function Sidebar() {
       {/* File Action Buttons Panel matching the design mock */}
       <div className="p-3 border-b border-border-figma flex space-x-2">
         <button
-          onClick={() => {
-            setSelectedFolderForNewItem("/");
-            setIsCreatingFile(true);
-            setIsCreatingFolder(false);
-          }}
+          onClick={() => startCreating("file", "/")}
           className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
         >
           + File
         </button>
         <button
-          onClick={() => {
-            setSelectedFolderForNewItem("/");
-            setIsCreatingFolder(true);
-            setIsCreatingFile(false);
-          }}
+          onClick={() => startCreating("folder", "/")}
           className="flex-1 text-center py-1 px-3 bg-[#131924] hover:bg-[#1d2737] border border-border-figma text-zinc-200 hover:text-white rounded text-[11px] font-semibold transition-colors cursor-pointer"
         >
           + Folder
@@ -424,6 +489,12 @@ export function Sidebar() {
         <div className="p-3 bg-[#141822] border-b border-border-figma space-y-2">
           <span className="text-[9px] text-scad-amber font-bold uppercase tracking-wider block">
             New {isCreatingFile ? "File" : "Folder"}
+            {selectedFolderForNewItem !== "/" && (
+              <span className="text-zinc-500 normal-case font-mono font-normal tracking-normal">
+                {" "}
+                in {selectedFolderForNewItem}
+              </span>
+            )}
           </span>
           <div className="flex items-center space-x-1">
             <input

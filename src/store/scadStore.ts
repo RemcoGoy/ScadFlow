@@ -33,6 +33,8 @@ interface ScadState {
   scadCode: string;
   modelUrl: string;
   activeFilePath: string;
+  // File that scadCode was loaded from; empty while a file is loading
+  codeFilePath: string;
   filesList: FileItem[];
   logs: LogEntry[];
   isCompiling: boolean;
@@ -49,6 +51,8 @@ interface ScadState {
   setScadCode: (scadCode: string) => void;
   setModelUrl: (modelUrl: string) => void;
   setActiveFilePath: (path: string) => void;
+  setCodeFilePath: (path: string) => void;
+  loadFile: (path: string, content: string) => void;
   setFilesList: (files: FileItem[]) => void;
   addLog: (text: string, type: "info" | "error") => void;
   clearLogs: () => void;
@@ -59,6 +63,7 @@ interface ScadState {
   toggleSidebar: () => void;
   openFile: (path: string) => void;
   closeFile: (path: string) => void;
+  renameOpenPath: (oldPath: string, newPath: string) => void;
   setViewMode: (mode: "shaded" | "wireframe" | "shaded-wireframe") => void;
   setCameraType: (type: "perspective" | "orthographic") => void;
   setEnvironment: (env: "neutral" | "sunset" | "studio") => void;
@@ -91,6 +96,7 @@ draw_object();
 `,
         modelUrl: "",
         activeFilePath: "/main.scad",
+        codeFilePath: "",
         filesList: [],
         logs: [],
         isCompiling: false,
@@ -107,6 +113,8 @@ draw_object();
         setScadCode: (scadCode) => set({ scadCode }),
         setModelUrl: (modelUrl) => set({ modelUrl }),
         setActiveFilePath: (path) => set({ activeFilePath: path }),
+        setCodeFilePath: (codeFilePath) => set({ codeFilePath }),
+        loadFile: (path, content) => set({ scadCode: content, codeFilePath: path }),
         setFilesList: (filesList) => set({ filesList }),
         addLog: (text, type) =>
           set((state) => ({
@@ -143,6 +151,17 @@ draw_object();
             return {
               openFiles: remaining,
               activeFilePath: nextActive,
+            };
+          }),
+        renameOpenPath: (oldPath, newPath) =>
+          set((state) => {
+            // Remap the path itself and, for directories, everything underneath it
+            const remap = (p: string) =>
+              p === oldPath || p.startsWith(`${oldPath}/`) ? newPath + p.slice(oldPath.length) : p;
+            return {
+              openFiles: state.openFiles.map(remap),
+              activeFilePath: remap(state.activeFilePath),
+              codeFilePath: remap(state.codeFilePath),
             };
           }),
         setViewMode: (viewMode) => set({ viewMode }),
