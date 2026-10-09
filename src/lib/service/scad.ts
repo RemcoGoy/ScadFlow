@@ -2,23 +2,20 @@ import OpenSCAD from "@/wasm/openscad.js";
 import { parseOff } from "@/lib/io/off";
 import { exportGlb } from "@/lib/io/glb";
 import { readFileAsDataURL } from "@/lib/utils";
-import { useScadStore } from "@/store/scadStore";
+import { useScadStore, type FileItem } from "@/store/scadStore";
 
 import { opfs } from "@/lib/fs/opfs";
 
-// Sync files recursively from OPFS to Emscripten FS
-async function syncOpfsToEmscripten(efs: any, currentPath: string = "/") {
+// Path -> OPFS lastModified of every file copied into the Emscripten FS
+const syncedFiles = new Map<string, number>();
+
+// Mirror the OPFS workspace into the Emscripten FS, copying only changed files
+async function syncOpfsToEmscripten(efs: any) {
   try {
-    if (currentPath === "/tmp" || currentPath === "/locale") return;
+    const tree = await opfs.readdirTree("/");
+    const seen = new Set<string>();
 
-    const entries = await opfs.readdirTree(currentPath);
-    // Note: readdirTree returns the whole tree recursively if we use it,
-    // but in opfs.ts it actually returns {name, path, isDir, children} for the subtree.
-    // However, our opfs.readdirTree implementation actually does traverse the whole tree.
-    // Let's just iterate over the flat entries or traverse the tree.
-
-    // Helper to traverse the tree nodes
-    const traverse = async (nodes: any[]) => {
+    const traverse = async (nodes: FileItem[]) => {
       for (const node of nodes) {
         if (node.isDir) {
           try {
@@ -26,38 +23,34 @@ async function syncOpfsToEmscripten(efs: any, currentPath: string = "/") {
           } catch {
             // directory likely already exists
           }
-          if (node.children) {
-            await traverse(node.children);
-          }
-        } else {
-          let writeNeeded = true;
-          if (node.size !== undefined && node.lastModified !== undefined) {
-            try {
-              const efsStat = efs.stat(node.path);
-              // Simple check: if size matches, we assume it's the same.
-              // To be perfectly safe, we also check if mtime matches if we could,
-              // but Emscripten sets mtime to current time on write.
-              // For OpenSCAD scripts, size check is usually enough to prevent massive redundant copies.
-              // We could also store a custom map of OPFS path -> lastModified if we want to be stricter.
-              if (efsStat.size === node.size) {
-                writeNeeded = false;
-              }
-            } catch {
-              // file doesn't exist in Emscripten FS
-            }
-          }
-
-          if (writeNeeded) {
-            const buffer = await opfs.readFileBuffer(node.path);
-            efs.writeFile(node.path, new Uint8Array(buffer));
-          }
+          await traverse(node.children ?? []);
+          continue;
         }
+
+        seen.add(node.path);
+        if (node.lastModified !== undefined && syncedFiles.get(node.path) === node.lastModified) {
+          continue;
+        }
+        const buffer = await opfs.readFileBuffer(node.path);
+        efs.writeFile(node.path, new Uint8Array(buffer));
+        syncedFiles.set(node.path, node.lastModified ?? 0);
       }
     };
+    await traverse(tree);
 
-    await traverse(entries);
+    // Remove files that were deleted or moved in OPFS
+    for (const path of syncedFiles.keys()) {
+      if (!seen.has(path)) {
+        try {
+          efs.unlink(path);
+        } catch {
+          // already gone
+        }
+        syncedFiles.delete(path);
+      }
+    }
   } catch (err) {
-    console.error(`Error synchronizing ${currentPath} from OPFS to Emscripten FS:`, err);
+    console.error("Error synchronizing OPFS to Emscripten FS:", err);
   }
 }
 
@@ -89,12 +82,13 @@ async function getScadInstance() {
 
   // Sync workspace files from OPFS to Emscripten FS
   console.log("Synchronizing OPFS files to Emscripten FS...");
-  await syncOpfsToEmscripten(globalScadInstance.FS, "/");
+  await syncOpfsToEmscripten(globalScadInstance.FS);
 
   return globalScadInstance;
 }
 
-export async function generateModel(code: string, variables: any[] = []): Promise<string> {
+// Compile the given entry file from the workspace; includes resolve relative to it
+export async function generateModel(mainPath: string, variables: any[] = []): Promise<string> {
   const store = useScadStore.getState();
   store.setCompiling(true);
   store.clearLogs();
@@ -102,8 +96,10 @@ export async function generateModel(code: string, variables: any[] = []): Promis
   try {
     const instance = await getScadInstance();
 
-    // Write current editor contents to virtual input file
-    instance.FS.writeFile("/input.scad", code);
+    if (!instance.FS.analyzePath(mainPath).exists) {
+      store.addLog(`Main file ${mainPath} not found`, "error");
+      throw new Error(`Main file ${mainPath} not found`);
+    }
 
     // Remove the previous output so an empty result doesn't show the last model again
     if (instance.FS.analyzePath("/model.off").exists) {
@@ -111,13 +107,7 @@ export async function generateModel(code: string, variables: any[] = []): Promis
     }
 
     // Build compilation args with parameters overrides (-D flags)
-    const compileArgs = [
-      "/input.scad",
-      "--backend=manifold",
-      "--export-format=off",
-      "-o",
-      "/model.off",
-    ];
+    const compileArgs = [mainPath, "--backend=manifold", "--export-format=off", "-o", "/model.off"];
 
     // Append custom parameters from the Customizer Panel if any
     for (const v of variables) {

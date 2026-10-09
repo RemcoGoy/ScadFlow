@@ -7,6 +7,8 @@ import { ConsolePanel } from "@/components/ConsolePanel.tsx";
 import { Customizer } from "@/components/Customizer.tsx";
 import { useScadStore } from "@/store/scadStore.ts";
 import { generateModel } from "./lib/service/scad";
+import { flushSaves } from "@/lib/fs/saveQueue";
+import { useEffect, useRef } from "react";
 import {
   Group as PanelGroup,
   Panel,
@@ -16,9 +18,7 @@ import {
 
 function App() {
   const {
-    scadCode,
     setModelUrl,
-    variables,
     isCompiling,
     showConsole,
     showCustomizer,
@@ -27,6 +27,8 @@ function App() {
     toggleCustomizer,
     toggleSidebar,
     activeFilePath,
+    mainFilePath,
+    fsVersion,
     autoRender,
     setAutoRender,
   } = useScadStore();
@@ -51,15 +53,35 @@ function App() {
     panelIds: rightPanelIds,
   });
 
+  // fsVersion of the workspace that was last rendered, to skip redundant auto-renders
+  const renderedFsVersion = useRef(-1);
+
+  // Always renders the main file from disk, whichever file is open in the editor
   const handleRefresh = async (customVars?: any[]) => {
     try {
-      const varsToUse = customVars || variables;
-      const displayUrl = await generateModel(scadCode, varsToUse);
+      await flushSaves();
+      const state = useScadStore.getState();
+      renderedFsVersion.current = state.fsVersion;
+      const displayUrl = await generateModel(state.mainFilePath, customVars || state.variables);
       setModelUrl(displayUrl);
     } catch (error) {
       console.error("Error during compilation:", error);
     }
   };
+
+  // Switching the main file always needs a new render
+  useEffect(() => {
+    renderedFsVersion.current = -1;
+  }, [mainFilePath]);
+
+  // Auto-render shortly after any workspace file is saved or the main file changes
+  useEffect(() => {
+    if (!autoRender) return;
+    const timer = setTimeout(() => {
+      if (renderedFsVersion.current !== useScadStore.getState().fsVersion) handleRefresh();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [fsVersion, mainFilePath, autoRender]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-canvas-bg overflow-hidden text-zinc-300 font-sans">
@@ -285,7 +307,7 @@ function App() {
                   <div className="flex-shrink-0 flex items-center h-8 px-4 bg-header-bg border-b border-border-figma select-none">
                     <span className="text-scad-amber mr-1.5 text-[10px] leading-none">●</span>
                     <span className="text-[11px] text-zinc-400 font-medium font-sans tracking-wide lowercase">
-                      preview.stl
+                      {mainFilePath.replace(/^\//, "")} preview
                     </span>
                   </div>
                   <div className="flex-1 min-h-0 relative">

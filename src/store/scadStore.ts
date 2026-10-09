@@ -35,6 +35,10 @@ interface ScadState {
   activeFilePath: string;
   // File that scadCode was loaded from; empty while a file is loading
   codeFilePath: string;
+  // Entry file that is rendered and drives the customizer
+  mainFilePath: string;
+  // Incremented whenever workspace files change on disk; triggers auto-render
+  fsVersion: number;
   filesList: FileItem[];
   logs: LogEntry[];
   isCompiling: boolean;
@@ -53,6 +57,8 @@ interface ScadState {
   setActiveFilePath: (path: string) => void;
   setCodeFilePath: (path: string) => void;
   loadFile: (path: string, content: string) => void;
+  setMainFilePath: (path: string) => void;
+  bumpFsVersion: () => void;
   setFilesList: (files: FileItem[]) => void;
   addLog: (text: string, type: "info" | "error") => void;
   clearLogs: () => void;
@@ -97,6 +103,8 @@ draw_object();
         modelUrl: "",
         activeFilePath: "/main.scad",
         codeFilePath: "",
+        mainFilePath: "/main.scad",
+        fsVersion: 0,
         filesList: [],
         logs: [],
         isCompiling: false,
@@ -115,6 +123,8 @@ draw_object();
         setActiveFilePath: (path) => set({ activeFilePath: path }),
         setCodeFilePath: (codeFilePath) => set({ codeFilePath }),
         loadFile: (path, content) => set({ scadCode: content, codeFilePath: path }),
+        setMainFilePath: (mainFilePath) => set({ mainFilePath }),
+        bumpFsVersion: () => set((state) => ({ fsVersion: state.fsVersion + 1 })),
         setFilesList: (filesList) => set({ filesList }),
         addLog: (text, type) =>
           set((state) => ({
@@ -162,6 +172,7 @@ draw_object();
               openFiles: state.openFiles.map(remap),
               activeFilePath: remap(state.activeFilePath),
               codeFilePath: remap(state.codeFilePath),
+              mainFilePath: remap(state.mainFilePath),
             };
           }),
         setViewMode: (viewMode) => set({ viewMode }),
@@ -175,6 +186,7 @@ draw_object();
         partialize: (state) => ({
           scadCode: state.scadCode,
           activeFilePath: state.activeFilePath,
+          mainFilePath: state.mainFilePath,
           showConsole: state.showConsole,
           showCustomizer: state.showCustomizer,
           showSidebar: state.showSidebar,

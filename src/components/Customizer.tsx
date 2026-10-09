@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useScadStore, type ParamVariable } from "@/store/scadStore";
+import { opfs } from "@/lib/fs/opfs";
+import { flushSaves, queueSave } from "@/lib/fs/saveQueue";
 
 export function parseScadVariables(code: string): ParamVariable[] {
   const vars: ParamVariable[] = [];
@@ -76,12 +78,43 @@ export function Customizer({
 }: {
   onParametersChange: (vars: ParamVariable[]) => void;
 }) {
-  const { scadCode, variables, setVariables, setScadCode } = useScadStore();
+  const { scadCode, codeFilePath, mainFilePath, fsVersion, variables, setVariables, setScadCode } =
+    useScadStore();
   const initialParseDone = useRef(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
+  // Parameters always come from the main file: the live editor buffer when it is open,
+  // otherwise its contents on disk
+  const mainIsOpen = codeFilePath === mainFilePath;
+  const [diskCode, setDiskCode] = useState("");
   useEffect(() => {
-    const parsed = parseScadVariables(scadCode);
+    if (mainIsOpen) return;
+    let cancelled = false;
+    opfs
+      .readFile(mainFilePath)
+      .then((code) => !cancelled && setDiskCode(code))
+      .catch(() => !cancelled && setDiskCode(""));
+    return () => {
+      cancelled = true;
+    };
+  }, [mainFilePath, mainIsOpen, fsVersion]);
+  const mainCode = mainIsOpen ? scadCode : diskCode;
+  const mainCodeRef = useRef(mainCode);
+  mainCodeRef.current = mainCode;
+
+  // Write updated parameter values into the main file and save it right away
+  const writeMainCode = async (code: string) => {
+    if (useScadStore.getState().codeFilePath === mainFilePath) {
+      setScadCode(code);
+    } else {
+      setDiskCode(code);
+    }
+    queueSave(mainFilePath, code);
+    await flushSaves();
+  };
+
+  useEffect(() => {
+    const parsed = parseScadVariables(mainCode);
 
     const updatedVars = parsed.map((pv) => {
       const existing = variables.find((ev) => ev.name === pv.name);
@@ -93,7 +126,7 @@ export function Customizer({
 
     setVariables(updatedVars);
     initialParseDone.current = true;
-  }, [scadCode]);
+  }, [mainCode]);
 
   const groups: Record<string, ParamVariable[]> = {};
   for (const v of variables) {
@@ -135,7 +168,7 @@ export function Customizer({
     setVariables(updated);
 
     if (commit) {
-      const currentCode = useScadStore.getState().scadCode;
+      const currentCode = mainCodeRef.current;
       const lines = currentCode.split("\n");
       let updatedCode = false;
       const newLines = lines.map((line) => {
@@ -154,14 +187,15 @@ export function Customizer({
       });
 
       if (updatedCode) {
-        setScadCode(newLines.join("\n"));
+        writeMainCode(newLines.join("\n")).then(() => onParametersChange(updated));
+      } else {
+        onParametersChange(updated);
       }
-      onParametersChange(updated);
     }
   };
 
   const handleCommit = () => {
-    const currentCode = useScadStore.getState().scadCode;
+    const currentCode = mainCodeRef.current;
     const currentVars = useScadStore.getState().variables;
     const lines = currentCode.split("\n");
     let updatedCode = false;
@@ -187,9 +221,10 @@ export function Customizer({
     });
 
     if (updatedCode) {
-      setScadCode(newLines.join("\n"));
+      writeMainCode(newLines.join("\n")).then(() => onParametersChange(currentVars));
+    } else {
+      onParametersChange(currentVars);
     }
-    onParametersChange(currentVars);
   };
 
   return (

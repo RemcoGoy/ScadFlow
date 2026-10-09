@@ -1,16 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useScadStore, FileItem } from "@/store/scadStore";
 import { isFileSystemAccessSupported, syncDirectoryHandleToOpfs } from "@/lib/fs/fileSystemAccess";
 import { opfs, getParentDir } from "@/lib/fs/opfs";
 import JSZip from "jszip";
-import { FilePlus, FolderPlus } from "lucide-react";
+import { flushSaves } from "@/lib/fs/saveQueue";
+import {
+  Copy,
+  FileCode,
+  FilePlus,
+  FolderPlus,
+  FolderSync,
+  Pencil,
+  Play,
+  Trash2,
+} from "lucide-react";
+import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 
 // dataTransfer type used for dragging tree items, to tell them apart from OS file drops
 const TREE_ITEM_MIME = "application/x-scadflow-path";
 
 export function Sidebar() {
-  const { filesList, setFilesList, activeFilePath, openFile, closeFile, renameOpenPath } =
-    useScadStore();
+  const {
+    filesList,
+    setFilesList,
+    activeFilePath,
+    mainFilePath,
+    setMainFilePath,
+    bumpFsVersion,
+    openFile,
+    closeFile,
+    renameOpenPath,
+  } = useScadStore();
 
   const [newFileName, setNewFileName] = useState("");
   const [isCreatingFile, setIsCreatingFile] = useState(false);
@@ -25,10 +45,18 @@ export function Sidebar() {
 
   const [isDragging, setIsDragging] = useState(false);
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    node: FileItem | null;
+  } | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const refreshFileTree = async () => {
     const tree = await readOpfsDirectoryTree("/");
     setFilesList(tree);
+    // Files may have been added, moved or deleted; re-render the main file
+    bumpFsVersion();
   };
 
   useEffect(() => {
@@ -121,13 +149,19 @@ export function Sidebar() {
     }
   };
 
-  const handleDeleteItem = async (path: string, isDir: boolean, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteItem = async (path: string, isDir: boolean, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     if (!confirm(`Are you sure you want to delete ${path}?`)) return;
+    // Write pending edits first so a delayed autosave can't recreate the file
+    await flushSaves();
 
     try {
       if (isDir) {
         await opfs.rmdir(path);
+        // Close tabs of files that were inside the folder
+        for (const openPath of useScadStore.getState().openFiles) {
+          if (openPath.startsWith(`${path}/`)) closeFile(openPath);
+        }
       } else {
         await opfs.unlink(path);
         closeFile(path);
@@ -153,6 +187,7 @@ export function Sidebar() {
     }
 
     try {
+      await flushSaves();
       await opfs.rename(oldPath, newPath);
       setRenamingPath(null);
       renameOpenPath(oldPath, newPath);
@@ -220,6 +255,7 @@ export function Sidebar() {
         alert(`${newPath} already exists`);
         return;
       }
+      await flushSaves();
       await opfs.rename(srcPath, newPath);
       renameOpenPath(srcPath, newPath);
       await refreshFileTree();
@@ -297,6 +333,69 @@ export function Sidebar() {
       .filter((node): node is FileItem => node !== null);
   };
 
+  const startRenaming = (node: FileItem) => {
+    setRenameValue(node.name);
+    setRenamingPath(node.path);
+  };
+
+  const getContextMenuItems = (node: FileItem | null): ContextMenuItem[] => {
+    // Empty space in the tree: create at the root
+    if (!node) {
+      return [
+        { label: "New File", icon: <FilePlus />, onSelect: () => startCreating("file", "/") },
+        { label: "New Folder", icon: <FolderPlus />, onSelect: () => startCreating("folder", "/") },
+        "separator",
+        { label: "Sync Local Directory", icon: <FolderSync />, onSelect: handleOpenLocalDirectory },
+      ];
+    }
+
+    const common: ContextMenuItem[] = [
+      { label: "Rename", icon: <Pencil />, onSelect: () => startRenaming(node) },
+      {
+        label: "Copy Path",
+        icon: <Copy />,
+        onSelect: () => navigator.clipboard?.writeText(node.path.replace(/^\//, "")),
+      },
+      "separator",
+      {
+        label: "Delete",
+        icon: <Trash2 />,
+        danger: true,
+        onSelect: () => handleDeleteItem(node.path, node.isDir),
+      },
+    ];
+
+    if (node.isDir) {
+      return [
+        { label: "New File", icon: <FilePlus />, onSelect: () => startCreating("file", node.path) },
+        {
+          label: "New Folder",
+          icon: <FolderPlus />,
+          onSelect: () => startCreating("folder", node.path),
+        },
+        "separator",
+        ...common,
+      ];
+    }
+
+    const isScad = node.name.endsWith(".scad");
+    return [
+      { label: "Open", icon: <FileCode />, onSelect: () => handleOpenFile(node.path) },
+      ...(isScad
+        ? [
+            {
+              label: node.path === mainFilePath ? "Main File" : "Set as Main File",
+              icon: <Play />,
+              disabled: node.path === mainFilePath,
+              onSelect: () => setMainFilePath(node.path),
+            },
+          ]
+        : []),
+      "separator",
+      ...common,
+    ];
+  };
+
   const renderTreeNodes = (nodes: FileItem[]) => {
     return nodes.map((node) => {
       const isCollapsed = collapsedFolders[node.path] ?? false;
@@ -320,6 +419,12 @@ export function Sidebar() {
               setDropTargetPath(node.isDir ? node.path : null);
             }}
             onDrop={(e) => handleDropOn(e, node.isDir ? node.path : getParentDir(node.path))}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (isRenaming) return;
+              setContextMenu({ x: e.clientX, y: e.clientY, node });
+            }}
             className={`group/item flex items-center justify-between py-1 px-3 rounded cursor-pointer transition-all duration-100 ${
               isDropTarget
                 ? "bg-[#1d2737] ring-1 ring-inset ring-scad-amber/60 text-zinc-200"
@@ -354,13 +459,39 @@ export function Sidebar() {
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span className="truncate">{node.name}</span>
+                <>
+                  <span className="truncate">{node.name}</span>
+                  {node.path === mainFilePath && (
+                    <span
+                      className="text-[8px] font-sans font-bold uppercase tracking-wider text-scad-amber/80 border border-scad-amber/40 rounded px-1 leading-tight"
+                      title="Main file: this file is rendered"
+                    >
+                      main
+                    </span>
+                  )}
+                </>
               )}
             </div>
 
             {/* Actions */}
             {!isRenaming && (
               <div className="flex items-center space-x-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                {!node.isDir && node.path !== mainFilePath && node.name.endsWith(".scad") && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMainFilePath(node.path);
+                    }}
+                    className={`p-0.5 rounded transition-colors ${
+                      isActive
+                        ? "text-scad-amber/80 hover:text-scad-amber hover:bg-white/5"
+                        : "text-zinc-500 hover:text-zinc-300 hover:bg-[#1a2232]"
+                    }`}
+                    title="Set as main file"
+                  >
+                    <Play className="h-3 w-3" />
+                  </button>
+                )}
                 {node.isDir && (
                   <>
                     <button
@@ -563,7 +694,13 @@ export function Sidebar() {
       )}
 
       {/* Sources Flat Section List */}
-      <div className="p-3 select-none flex-1 overflow-y-auto">
+      <div
+        className="p-3 select-none flex-1 overflow-y-auto"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setContextMenu({ x: e.clientX, y: e.clientY, node: null });
+        }}
+      >
         <h3 className="text-[10px] font-bold tracking-wider text-zinc-500 uppercase font-sans mb-2">
           SOURCES
         </h3>
@@ -621,6 +758,14 @@ export function Sidebar() {
           <span>Backup ZIP</span>
         </button>
       </div>
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems(contextMenu.node)}
+          onClose={closeContextMenu}
+        />
+      )}
     </div>
   );
 }
