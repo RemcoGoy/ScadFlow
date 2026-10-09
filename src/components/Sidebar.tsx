@@ -9,6 +9,7 @@ import {
   unlinkFolder,
 } from "@/lib/fs/linkedFolder";
 import { workspace } from "@/lib/fs/workspace";
+import { updateIncludePaths } from "@/lib/fs/includePaths";
 import { opfs, getParentDir } from "@/lib/fs/opfs";
 import JSZip from "jszip";
 import { flushSaves } from "@/lib/fs/saveQueue";
@@ -221,10 +222,15 @@ export function Sidebar() {
     }
 
     try {
+      if (await opfs.exists(newPath)) {
+        alert(`${newPath} already exists`);
+        return;
+      }
       await flushSaves();
       await workspace.rename(oldPath, newPath);
       setRenamingPath(null);
       renameOpenPath(oldPath, newPath);
+      await updateIncludePaths(oldPath, newPath);
       await refreshFileTree();
     } catch (err: any) {
       alert(`Rename failed: ${err.message}`);
@@ -292,6 +298,7 @@ export function Sidebar() {
       await flushSaves();
       await workspace.rename(srcPath, newPath);
       renameOpenPath(srcPath, newPath);
+      await updateIncludePaths(srcPath, newPath);
       await refreshFileTree();
     } catch (err: any) {
       alert(`Move failed: ${err.message}`);

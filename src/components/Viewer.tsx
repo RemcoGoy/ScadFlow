@@ -15,6 +15,9 @@ function Model({
 }) {
   const { scene } = useGLTF(url);
 
+  // Each render produces a new model URL; drop old models from useGLTF's cache
+  useEffect(() => () => useGLTF.clear(url), [url]);
+
   const clonedScene = useMemo(() => {
     if (!scene) return null;
 

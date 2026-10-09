@@ -6,7 +6,7 @@ import { Viewer } from "@/components/Viewer.tsx";
 import { ConsolePanel } from "@/components/ConsolePanel.tsx";
 import { Customizer } from "@/components/Customizer.tsx";
 import { useScadStore } from "@/store/scadStore.ts";
-import { generateModel } from "./lib/service/scad";
+import { cancelCompile, CompileCancelledError, generateModel } from "./lib/service/scad";
 import { flushSaves } from "@/lib/fs/saveQueue";
 import { restoreLinkedFolder } from "@/lib/fs/linkedFolder";
 import { useEffect, useRef } from "react";
@@ -64,8 +64,13 @@ function App() {
       const state = useScadStore.getState();
       renderedFsVersion.current = state.fsVersion;
       const displayUrl = await generateModel(state.mainFilePath, customVars || state.variables);
+      // Free the previous model; models are object URLs of GLB blobs
+      const previousUrl = useScadStore.getState().modelUrl;
+      if (previousUrl.startsWith("blob:")) URL.revokeObjectURL(previousUrl);
       setModelUrl(displayUrl);
     } catch (error) {
+      // A newer render replaced this one
+      if (error instanceof CompileCancelledError) return;
       console.error("Error during compilation:", error);
     }
   };
@@ -322,6 +327,12 @@ function App() {
                         <span className="text-[10px] text-zinc-400 font-semibold tracking-wider font-sans">
                           Updating viewport...
                         </span>
+                        <button
+                          onClick={cancelCompile}
+                          className="py-0.5 px-2 bg-zinc-800 hover:bg-[#383838] text-zinc-400 hover:text-zinc-200 rounded text-[9px] font-sans transition-colors"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     )}
                   </div>
