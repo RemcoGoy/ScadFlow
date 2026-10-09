@@ -11,7 +11,7 @@ const INCLUDE_RE = /\b(include|use)(\s*)<([^>\n]+)>/g;
 const dirOf = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
 
 // Resolve a reference the way OpenSCAD does: relative to the including file's folder
-function resolvePath(dir: string, ref: string): string {
+export function resolvePath(dir: string, ref: string): string {
   const out: string[] = [];
   for (const part of (ref.startsWith("/") ? ref : `${dir}/${ref}`).split("/")) {
     if (!part || part === ".") continue;
@@ -21,7 +21,7 @@ function resolvePath(dir: string, ref: string): string {
   return `/${out.join("/")}`;
 }
 
-function relativePath(fromDir: string, to: string): string {
+export function relativePath(fromDir: string, to: string): string {
   const from = fromDir.split("/").filter(Boolean);
   const target = to.split("/").filter(Boolean);
   let common = 0;
@@ -32,8 +32,32 @@ function relativePath(fromDir: string, to: string): string {
 }
 
 // Replace the oldPath prefix of a path with newPath (paths outside oldPath are unchanged)
-const movePrefix = (path: string, oldPath: string, newPath: string) =>
+export const movePrefix = (path: string, oldPath: string, newPath: string) =>
   path === oldPath || path.startsWith(`${oldPath}/`) ? newPath + path.slice(oldPath.length) : path;
+
+/**
+ * Rewrite the include/use statements of one file after oldPath was moved to newPath.
+ * `file` is the file's current path and `existing` the workspace files after the move.
+ */
+export function rewriteIncludes(
+  content: string,
+  file: string,
+  oldPath: string,
+  newPath: string,
+  existing: Set<string>,
+): string {
+  // Where this file was before the move; references were written relative to that
+  const oldFile = movePrefix(file, newPath, oldPath);
+  return content.replace(INCLUDE_RE, (match, keyword, space, rawRef) => {
+    const ref = rawRef.trim();
+    const oldTarget = resolvePath(dirOf(oldFile), ref);
+    const target = movePrefix(oldTarget, oldPath, newPath);
+    if (!existing.has(target)) return match;
+    if (target === oldTarget && file === oldFile) return match;
+    const newRef = ref.startsWith("/") ? target : relativePath(dirOf(file), target);
+    return newRef === ref ? match : `${keyword}${space}<${newRef}>`;
+  });
+}
 
 async function listWorkspaceFiles(): Promise<string[]> {
   const files: string[] = [];
@@ -61,19 +85,8 @@ export async function updateIncludePaths(oldPath: string, newPath: string): Prom
 
   for (const file of files) {
     if (!file.endsWith(".scad")) continue;
-    // Where this file was before the move; references were written relative to that
-    const oldFile = movePrefix(file, newPath, oldPath);
     const content = await opfs.readFile(file);
-
-    const updated = content.replace(INCLUDE_RE, (match, keyword, space, rawRef) => {
-      const ref = rawRef.trim();
-      const oldTarget = resolvePath(dirOf(oldFile), ref);
-      const target = movePrefix(oldTarget, oldPath, newPath);
-      if (!existing.has(target)) return match;
-      if (target === oldTarget && file === oldFile) return match;
-      const newRef = ref.startsWith("/") ? target : relativePath(dirOf(file), target);
-      return newRef === ref ? match : `${keyword}${space}<${newRef}>`;
-    });
+    const updated = rewriteIncludes(content, file, oldPath, newPath, existing);
 
     if (updated === content) continue;
     await workspace.writeFile(file, updated);
