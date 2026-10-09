@@ -7,7 +7,7 @@ import { useScadStore, type FileItem } from "@/store/scadStore";
 // changes made by other programs are pulled in whenever the app regains focus.
 
 // OPFS top-level entries that belong to the app rather than the user's project
-const INTERNAL_NAMES = new Set(["libraries", "tmp", "locale", "lost+found"]);
+export const INTERNAL_NAMES = new Set(["libraries", "tmp", "locale", "lost+found"]);
 
 type Entry = { kind: "file"; lastModified: number; size: number } | { kind: "dir" };
 
