@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.2",
   "type": "module",
+  "packageManager": "pnpm@11.28.5",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -13,7 +14,6 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@codemirror/lang-javascript": "^6.2.3",
     "@gltf-transform/core": "^4.1.1",
     "@gltf-transform/extensions": "^4.1.1",
     "@monaco-editor/loader": "^1.5.0",
