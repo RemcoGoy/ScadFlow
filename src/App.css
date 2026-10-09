@@ -1,1 +1,83 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300..700;1,300..700&family=Outfit:wght@300..900&family=JetBrains+Mono:ital,wght@0,300..800;1,300..800&display=swap");
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Custom ScadForge/ScadFlow Dark Amber Palette */
+  --color-scad-amber: #e2a04e;
+  --color-scad-amber-dark: #b87b31;
+  --color-scad-amber-bg: rgba(226, 160, 78, 0.08);
+  --color-scad-amber-active: rgba(226, 160, 78, 0.15);
+
+  /* Layout backgrounds matching the dark blue-gray mockup */
+  --color-canvas-bg: #13161c; /* Code editor background */
+  --color-panel-bg: #0b0e14; /* Sidebar, console, customizer background */
+  --color-header-bg: #0d1117; /* Header & Panel-header background */
+  --color-border-figma: #1e293b; /* Slate blue-gray borders */
+}
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(226, 160, 78, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(226, 160, 78, 0.3);
+}
+
+/* Custom styles for Monaco Editor context overlay */
+.monaco-editor .margin {
+  background: #13161c !important;
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Slider styling to match Figma/ScadForge property sliders */
+input[type="range"].figma-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #1e293b;
+  height: 2px;
+  border-radius: 9999px;
+}
+
+input[type="range"].figma-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #e2a04e;
+  cursor: ew-resize;
+  transition: transform 0.1s ease;
+}
+
+input[type="range"].figma-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+::selection {
+  background: rgba(226, 160, 78, 0.2);
+  color: inherit;
+}

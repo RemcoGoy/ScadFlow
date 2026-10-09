@@ -2,31 +2,32 @@
 
 <div align="center">
 
-A modern, feature-rich (well, not yet) editor for OpenSCAD, built with [Tauri](https://tauri.app/), [React](https://reactjs.org/), and [TypeScript](https://www.typescriptlang.org/). Create, edit, and visualize 3D models, powered by WebAssembly.
+A modern, feature-rich editor for OpenSCAD, built with [React](https://reactjs.org/) and [TypeScript](https://www.typescriptlang.org/). Create, edit, and visualize 3D models, powered by WebAssembly.
 
 ![OpenSCAD Web Editor Screenshot](screenshot.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Made with Tauri](https://img.shields.io/badge/Made%20with-Tauri-blue)](https://tauri.app/)
 [![OpenSCAD](https://img.shields.io/badge/Powered%20by-OpenSCAD-green)](https://openscad.org/)
 
 </div>
 
 ## ✨ Features
 
-- 🚀 Real-time OpenSCAD compilation and preview
-
-- 🌐 WebAssembly-powered OpenSCAD engine
-- 💻 Cross-platform support (Windows, macOS, Linux)
+- 🚀 **Real-time Compilation & Preview**: Instantly compile your OpenSCAD code and view the 3D model in real time.
+- 🌐 **WebAssembly Engine**: Runs the original OpenSCAD interpreter directly in your browser or desktop environment.
+- 📝 **Monaco-based Editor**: Includes syntax highlighting, custom auto-completions, and snippets built specifically for OpenSCAD.
+- 🎛️ **Parameters Customizer**: Interactively modify your model parameters (like sizes, counts, shapes) with auto-generated sliders and dropdowns.
+- 📁 **File System Integration**: Full virtual workspace with support for importing local directories using the File System Access API and exporting zip archives.
+- 💻 **Cross-platform**: Runs seamlessly on Windows, macOS, and Linux in any modern web browser.
 
 ## 🗺️ Roadmap
 
-- [ ] Syntax highlighting
-- [ ] Auto-completion and code snippets
+- [x] Syntax highlighting
+- [x] Auto-completion and code snippets
+- [x] File system integration
+- [x] Export to various 3D formats (OFF and GLB)
+- [x] Parameter customization UI
 - [ ] Integrated documentation viewer
-- [ ] File system integration
-- [ ] Export to various 3D formats
-- [ ] Parameter customization UI
 - [ ] Integrated debugging tools
 - [ ] Flow editor
 
@@ -34,9 +35,8 @@ A modern, feature-rich (well, not yet) editor for OpenSCAD, built with [Tauri](h
 
 Before you begin, ensure you have the following installed:
 
-- [Node.js](https://nodejs.org/) (v21 or newer)
+- [Node.js](https://nodejs.org/) (v22.13 or newer)
 - [pnpm](https://pnpm.io/installation) (v10 or newer)
-- [Rust](https://www.rust-lang.org/tools/install)
 - [Git](https://git-scm.com/downloads)
 
 ## 📦 Installation
@@ -60,13 +60,13 @@ pnpm install
 
 4. Start the development server:
 ```bash
-pnpm run tauri dev
+pnpm run dev
 ```
 
 ## 🏗️ Building for Production
 
 ```bash
-pnpm run tauri build
+pnpm run build
 ```
 
 ## 🤝 Contributing

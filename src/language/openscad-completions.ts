@@ -1,7 +1,8 @@
 // Portions of this file are Copyright 2021 Google LLC, and licensed under GPL2+. See COPYING.
 
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
-import { join, Symlinks } from "@/lib/fs/filesystem";
+import { join } from "@/lib/utils";
+import { Symlinks } from "@/lib/fs/zip-archives";
 import {
   ParsedFile,
   ParsedFunctionoidDef,
@@ -206,7 +207,7 @@ export async function buildOpenSCADCompletionItemProvider() {
           const folderName = folderPrefix == "" ? "" : "/" + folderPrefix;
           let files: string[] | null = null;
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          for (const folder of [join("/libraries", folderName), join(workingDir, folderName)]) {
+          for (const _folder of [join("/libraries", folderName), join(workingDir, folderName)]) {
             files = folderPrefix == "" ? [...Object.keys(allSymlinks)] : [];
             try {
               // Mock implementation since we can't import fs

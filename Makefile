@@ -68,10 +68,10 @@ libs/openscad-wasm:
 	( cd libs/openscad-wasm && unzip ../openscad-wasm.zip )
 	
 public/openscad.js: libs/openscad-wasm libs/openscad-wasm/openscad.js
-	ln -sf libs/openscad-wasm/openscad.js public/openscad.js
+	ln -sf ../libs/openscad-wasm/openscad.js public/openscad.js
 		
 public/openscad.wasm: libs/openscad-wasm libs/openscad-wasm/openscad.wasm
-	ln -sf libs/openscad-wasm/openscad.wasm public/openscad.wasm
+	ln -sf ../libs/openscad-wasm/openscad.wasm public/openscad.wasm
 
 # Var w/ noto fonts
 NOTO_FONTS=\
